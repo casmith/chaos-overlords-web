@@ -1,0 +1,13 @@
+#!/bin/bash
+# Grab the virtual display to a PNG. Phase 1 verification aid:
+#   docker exec chaos1 chaos-screenshot && docker cp chaos1:/config/logs/screen.png .
+set -euo pipefail
+# shellcheck source=/dev/null
+. /usr/local/bin/chaos-env
+
+out="${1:-${CONFIG_DIR}/logs/screen.png}"
+mkdir -p "$(dirname "${out}")"
+# -screen is required: without it, Wine's override-redirect menu popups are
+# missing from the capture even though they are on screen.
+xwd -display "${DISPLAY}" -root -screen -silent | xwdtopnm 2>/dev/null | pnmtopng > "${out}" 2>/dev/null
+echo "${out}"

@@ -1,0 +1,21 @@
+#!/usr/bin/pulseaudio -nF
+#
+# PulseAudio configuration for the Chaos Overlords container.
+#
+# There is no physical sound card. Wine plays into a null sink, and the browser
+# streaming layer captures that sink's monitor source. Each container runs its
+# own daemon, so audio is naturally independent per player (SPEC section 11).
+
+# Local clients (Wine, and later the streaming service) connect over a unix
+# socket in /run/pulse. No TCP module: audio never leaves the container except
+# through the streaming service.
+load-module module-native-protocol-unix socket=/run/pulse/native auth-anonymous=1
+
+# The virtual output device.
+load-module module-null-sink sink_name=chaos-out sink_properties=device.description="Chaos_Overlords_Output"
+
+# Keep clients from being moved to some other (non-existent) device.
+load-module module-always-sink
+
+set-default-sink chaos-out
+set-default-source chaos-out.monitor

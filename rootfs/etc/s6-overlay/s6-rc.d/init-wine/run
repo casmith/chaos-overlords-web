@@ -1,0 +1,8 @@
+#!/command/with-contenv bash
+set -e
+. /usr/local/bin/chaos-env
+chaos-wait-x 30
+if [ "$(id -u)" = "0" ]; then
+    exec s6-setuidgid "${APP_USER}" /opt/chaos/scripts/init-wine.sh
+fi
+exec /opt/chaos/scripts/init-wine.sh

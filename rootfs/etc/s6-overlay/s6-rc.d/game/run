@@ -1,0 +1,7 @@
+#!/command/with-contenv bash
+. /usr/local/bin/chaos-env
+chaos-wait-x 30 || exit 1
+if [ "$(id -u)" = "0" ]; then
+    exec s6-setuidgid "${APP_USER}" /opt/chaos/scripts/launch-game.sh
+fi
+exec /opt/chaos/scripts/launch-game.sh

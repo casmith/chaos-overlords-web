@@ -1,0 +1,10 @@
+#!/command/with-contenv bash
+. /usr/local/bin/chaos-env
+# A session bus at a fixed, known address. PulseAudio and Wine both look for
+# one; without it they fall back to spawning dbus-launch, which cannot work
+# under s6 and produces startup warnings. The address is set as a container-wide
+# environment variable in the Dockerfile, so every service finds this bus.
+rm -f /run/dbus/session_bus_socket
+chaos_log audio "Starting D-Bus session bus"
+chaos_as_user dbus-daemon --session --nofork --nopidfile \
+    --address="unix:path=/run/dbus/session_bus_socket"

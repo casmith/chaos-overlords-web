@@ -1,0 +1,19 @@
+#!/bin/bash
+# Block until the X display accepts connections. s6 marks a longrun "up" as
+# soon as it is exec'd, which is well before Xvfb has created its socket.
+set -u
+# shellcheck source=/dev/null
+. /usr/local/bin/chaos-env
+
+timeout="${1:-30}"
+deadline=$(( $(date +%s) + timeout ))
+
+while [ "$(date +%s)" -lt "${deadline}" ]; do
+    if xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; then
+        exit 0
+    fi
+    sleep 0.25
+done
+
+chaos_err display "X display ${DISPLAY} did not come up within ${timeout}s"
+exit 1

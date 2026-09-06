@@ -1,0 +1,13 @@
+# The game is mounted at run time and must never enter the build context.
+/chaos/
+/game/
+/chaos-overlords/
+
+.git/
+.env
+docs/
+SPEC.md
+README.md
+*.pcap
+*.png
+*.log

@@ -1,0 +1,21 @@
+#!/command/with-contenv bash
+. /usr/local/bin/chaos-env
+if [ "${ENABLE_AUDIO}" != "true" ]; then
+    chaos_log audio "Audio disabled (ENABLE_AUDIO=${ENABLE_AUDIO})"
+    exec sleep infinity
+fi
+# PulseAudio generates an auth cookie on first start and warns loudly about the
+# file being absent first. Create it up front; access is already restricted to
+# this container's unix socket.
+cookie_dir="${HOME}/.config/pulse"
+if [ ! -s "${cookie_dir}/cookie" ]; then
+    mkdir -p "${cookie_dir}"
+    head -c 256 /dev/urandom > "${cookie_dir}/cookie"
+    chmod 600 "${cookie_dir}/cookie"
+    [ "$(id -u)" = "0" ] && chown -R "${APP_USER}:${APP_GROUP}" "${HOME}/.config"
+fi
+
+chaos_log audio "Starting PulseAudio with null sink '${PULSE_SINK_NAME}'"
+args=(--exit-idle-time=-1 -n --file=/opt/chaos/config/pulseaudio/default.pa --disallow-exit)
+[ "${DEBUG}" = "true" ] && args+=(-v)
+chaos_as_user pulseaudio "${args[@]}"

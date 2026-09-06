@@ -1,0 +1,91 @@
+#!/bin/bash
+# Shared environment defaults for every Chaos Overlords container service.
+# Sourced (not executed) by the s6 service scripts and the helper scripts.
+
+# --- Paths -------------------------------------------------------------------
+: "${CONFIG_DIR:=/config}"
+: "${GAME_DIR:=/game}"
+
+# Where the game files are mirrored inside the Wine prefix. The game's shipped
+# registry file uses C:\games\Chaos as its AppPath, so we keep that layout.
+: "${GAME_WIN_DIR:=C:\\games\\Chaos}"
+: "${GAME_UNIX_DIR:=${CONFIG_DIR}/wine/drive_c/games/Chaos}"
+
+# --- Wine --------------------------------------------------------------------
+: "${WINEPREFIX:=${CONFIG_DIR}/wine}"
+: "${WINEARCH:=win32}"
+: "${WINE_WINDOWS_VERSION:=win98}"
+: "${WINE_VIRTUAL_DESKTOP:=true}"
+
+# --- Display -----------------------------------------------------------------
+: "${DISPLAY:=:0}"
+: "${DISPLAY_WIDTH:=640}"
+: "${DISPLAY_HEIGHT:=480}"
+: "${DISPLAY_DEPTH:=24}"
+
+# --- Audio -------------------------------------------------------------------
+: "${ENABLE_AUDIO:=true}"
+: "${PULSE_SINK_NAME:=chaos-out}"
+: "${PULSE_RUNTIME_PATH:=/run/pulse}"
+: "${PULSE_SERVER:=unix:${PULSE_RUNTIME_PATH}/native}"
+
+# --- Phase 1 diagnostics -----------------------------------------------------
+# Raw VNC is a development aid only; Phase 2 replaces it with Selkies.
+: "${ENABLE_VNC:=true}"
+: "${VNC_PORT:=5900}"
+
+# --- Behaviour ---------------------------------------------------------------
+: "${DEBUG:=false}"
+: "${GAME_RESTART_DELAY:=2}"
+: "${GAME_MAX_RESTARTS:=5}"
+: "${APP_USER:=chaos}"
+: "${APP_GROUP:=chaos}"
+: "${TZ:=America/Chicago}"
+
+if [ "${DEBUG}" = "true" ]; then
+    : "${WINEDEBUG:=+warn,+err}"
+else
+    : "${WINEDEBUG:=-all}"
+fi
+
+# Stop Wine from trying to download Mono/Gecko on first boot.
+: "${WINEDLLOVERRIDES:=mscoree,mshtml=}"
+
+export CONFIG_DIR GAME_DIR GAME_WIN_DIR GAME_UNIX_DIR
+export WINEPREFIX WINEARCH WINE_WINDOWS_VERSION WINE_VIRTUAL_DESKTOP
+export DISPLAY DISPLAY_WIDTH DISPLAY_HEIGHT DISPLAY_DEPTH
+export ENABLE_AUDIO PULSE_SINK_NAME PULSE_RUNTIME_PATH PULSE_SERVER
+export ENABLE_VNC VNC_PORT
+export DEBUG GAME_RESTART_DELAY GAME_MAX_RESTARTS APP_USER APP_GROUP TZ
+export WINEDEBUG WINEDLLOVERRIDES
+
+# --- Logging -----------------------------------------------------------------
+# Every stage prints "[stage] message" so `docker logs` reads as a timeline.
+chaos_log() { echo "[$1] ${*:2}"; }
+chaos_err() { echo "[$1] ERROR: ${*:2}" >&2; }
+chaos_debug() { [ "${DEBUG}" = "true" ] && echo "[$1] debug: ${*:2}"; return 0; }
+
+# --- Game executable discovery ----------------------------------------------
+# GAME_EXE may be unset; in that case pick the most plausible .exe in GAME_DIR
+# rather than hard-coding a filename (the retail release ships several names).
+chaos_find_game_exe() {
+    local candidate
+    if [ -n "${GAME_EXE:-}" ]; then
+        printf '%s' "${GAME_EXE}"
+        return 0
+    fi
+    candidate=$(find "${GAME_DIR}" -maxdepth 1 -type f -iname '*chaos*.exe' 2>/dev/null | sort | head -n1)
+    if [ -z "${candidate}" ]; then
+        candidate=$(find "${GAME_DIR}" -maxdepth 1 -type f -iname '*.exe' 2>/dev/null | sort | head -n1)
+    fi
+    printf '%s' "${candidate}"
+}
+
+# Run a command as the unprivileged app user. When the container is already
+# running unprivileged (hardened compose sets `user:`), just run it directly.
+chaos_as_user() {
+    if [ "$(id -u)" = "0" ]; then
+        exec s6-setuidgid "${APP_USER}" "$@"
+    fi
+    exec "$@"
+}

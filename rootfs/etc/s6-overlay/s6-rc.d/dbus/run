@@ -1,0 +1,9 @@
+#!/command/with-contenv bash
+. /usr/local/bin/chaos-env
+# PulseAudio consults the D-Bus system bus at startup; without one it works but
+# floods the log with connection errors. dbus-daemon itself drops to the
+# messagebus user, and the bus is reachable only from inside this container.
+mkdir -p /run/dbus
+rm -f /run/dbus/pid
+chaos_log audio "Starting D-Bus system bus"
+exec dbus-daemon --system --nofork --nopidfile

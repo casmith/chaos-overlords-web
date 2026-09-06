@@ -1,0 +1,84 @@
+# Chaos Overlords -- two-player reference deployment.
+#
+#   cp .env.example .env      # then point GAME_PATH at your game files
+#   docker compose build
+#   docker compose up -d
+#
+# Phase 1 status: the game runs under Wine on a virtual X display. Verify with a
+# VNC viewer against the ports below, or with:
+#   docker exec chaos1 chaos-screenshot
+# Browser streaming (Selkies) arrives in Phase 2.
+
+services:
+
+  chaos1:
+    build: .
+    image: chaos-overlords:latest
+    container_name: chaos1
+    hostname: chaos1
+    restart: unless-stopped
+    # Wine is given time to close the game and flush saves before anything is
+    # killed. Docker's 10s default is not enough.
+    stop_grace_period: 30s
+    environment:
+      GAME_EXE: ${GAME_EXE:-}
+      GAME_ARGS: ${GAME_ARGS:-}
+      DISPLAY_WIDTH: ${DISPLAY_WIDTH:-640}
+      DISPLAY_HEIGHT: ${DISPLAY_HEIGHT:-480}
+      DISPLAY_DEPTH: ${DISPLAY_DEPTH:-24}
+      WINE_WINDOWS_VERSION: ${WINE_WINDOWS_VERSION:-win98}
+      WINE_VIRTUAL_DESKTOP: ${WINE_VIRTUAL_DESKTOP:-true}
+      ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
+      ENABLE_VNC: ${ENABLE_VNC:-true}
+      TZ: ${TZ:-America/Chicago}
+      DEBUG: ${DEBUG:-false}
+    volumes:
+      # Game files: read-only, supplied by you, never part of the image.
+      - ${GAME_PATH:-./chaos}:/game:ro
+      # Per-player Wine prefix, saves and state.
+      - chaos1-config:/config
+    ports:
+      - "${CHAOS1_VNC_PORT:-5901}:5900"
+    networks:
+      - chaos-net
+    security_opt:
+      - no-new-privileges:true
+
+  chaos2:
+    build: .
+    image: chaos-overlords:latest
+    container_name: chaos2
+    hostname: chaos2
+    restart: unless-stopped
+    # Wine is given time to close the game and flush saves before anything is
+    # killed. Docker's 10s default is not enough.
+    stop_grace_period: 30s
+    environment:
+      GAME_EXE: ${GAME_EXE:-}
+      GAME_ARGS: ${GAME_ARGS:-}
+      DISPLAY_WIDTH: ${DISPLAY_WIDTH:-640}
+      DISPLAY_HEIGHT: ${DISPLAY_HEIGHT:-480}
+      DISPLAY_DEPTH: ${DISPLAY_DEPTH:-24}
+      WINE_WINDOWS_VERSION: ${WINE_WINDOWS_VERSION:-win98}
+      WINE_VIRTUAL_DESKTOP: ${WINE_VIRTUAL_DESKTOP:-true}
+      ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
+      ENABLE_VNC: ${ENABLE_VNC:-true}
+      TZ: ${TZ:-America/Chicago}
+      DEBUG: ${DEBUG:-false}
+    volumes:
+      - ${GAME_PATH:-./chaos}:/game:ro
+      - chaos2-config:/config
+    ports:
+      - "${CHAOS2_VNC_PORT:-5902}:5900"
+    networks:
+      - chaos-net
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  chaos-net:
+    name: chaos-net
+
+volumes:
+  chaos1-config:
+  chaos2-config:

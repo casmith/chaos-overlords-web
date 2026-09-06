@@ -1,0 +1,11 @@
+#!/command/with-contenv bash
+. /usr/local/bin/chaos-env
+if [ "${ENABLE_VNC}" != "true" ]; then
+    chaos_log stream "Raw VNC disabled"
+    exec sleep infinity
+fi
+chaos-wait-x 30 || exit 1
+chaos_log stream "Starting x11vnc on port ${VNC_PORT} (development view -- no audio)"
+args=(-display "${DISPLAY}" -rfbport "${VNC_PORT}" -forever -shared -nopw -noxdamage -repeat)
+[ "${DEBUG}" = "true" ] || args+=(-quiet)
+chaos_as_user x11vnc "${args[@]}"

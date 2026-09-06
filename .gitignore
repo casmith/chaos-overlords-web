@@ -1,1 +1,15 @@
-chaos
+# --- Game files: never commit copyrighted assets -----------------------------
+# GAME_PATH points at ./chaos by default; see docs/game-files.md.
+# These are anchored to the repository root on purpose: an unanchored "game/"
+# would also match the s6 service directory of the same name.
+/chaos/
+/game/
+/chaos-overlords/
+
+# --- Local configuration -----------------------------------------------------
+/.env
+
+# --- Scratch -----------------------------------------------------------------
+*.pcap
+/*.png
+/*.log

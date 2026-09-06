@@ -1,0 +1,6 @@
+#!/bin/bash
+# Ask the game supervisor to try launching Chaos Overlords again after it has
+# given up on automatic restarts.
+set -eu
+touch /run/chaos/relaunch
+echo "Relaunch requested."

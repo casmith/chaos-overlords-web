@@ -1,0 +1,12 @@
+#!/command/with-contenv bash
+. /usr/local/bin/chaos-env
+chaos_log display "Starting Xvfb on ${DISPLAY} at ${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}x${DISPLAY_DEPTH}"
+args=(
+    "${DISPLAY}"
+    -screen 0 "${DISPLAY_WIDTH}x${DISPLAY_HEIGHT}x${DISPLAY_DEPTH}"
+    -nolisten tcp
+    -noreset
+    -ac
+)
+[ "${DEBUG}" = "true" ] || args+=(-nocursor)
+chaos_as_user Xvfb "${args[@]}"
