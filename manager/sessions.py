@@ -23,6 +23,8 @@ from pathlib import Path
 import docker
 from docker.errors import NotFound, APIError
 
+import gangs
+
 log = logging.getLogger("sessions")
 
 LABEL_SESSION = "chaos.session.id"
@@ -94,6 +96,9 @@ class SessionManager:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.sessions: dict[str, Session] = {}
+        # Read from the operator's own game files; empty when they are not
+        # mounted, in which case sessions fall back to random identifiers.
+        self.gang_names: list[str] = gangs.load(cfg["game_dir"])
         self.client = docker.from_env()
         self.state_path = Path(cfg["state_dir"]) / "sessions.json"
         self._lock = asyncio.Lock()
@@ -192,6 +197,32 @@ class SessionManager:
             restart_policy={"Name": "unless-stopped"},
         )
 
+    def _next_id(self) -> str:
+        """A free gang name, or a random identifier when none is available.
+
+        Names recycle: one is free again the moment the session holding it is
+        deleted. Stopped sessions keep theirs, because their saves are still
+        there and the name is how a player finds them again.
+        """
+        taken = set(self.sessions)
+        free = [n for n in self.gang_names if n not in taken]
+        if free:
+            return secrets.choice(free)
+
+        # Every gang is spoken for. Rather than fail, number a repeat -- still
+        # readable, still unique, and it only happens past 90 live sessions.
+        if self.gang_names:
+            for suffix in range(2, 1000):
+                candidates = [f"{n}-{suffix}" for n in self.gang_names
+                              if f"{n}-{suffix}" not in taken]
+                if candidates:
+                    return secrets.choice(candidates)
+
+        sid = make_id()
+        while sid in taken:
+            sid = make_id()
+        return sid
+
     # --- lifecycle -----------------------------------------------------------
 
     async def start(self) -> None:
@@ -266,9 +297,7 @@ class SessionManager:
                     raise RuntimeError(
                         f"you already have {len(mine)} session(s); "
                         "delete one before starting another")
-            sid = make_id()
-            while sid in self.sessions:
-                sid = make_id()
+            sid = self._next_id()
             session = Session(id=sid, password=make_password(),
                               label=label.strip()[:40], owner=owner)
             self.sessions[sid] = session

@@ -46,7 +46,13 @@ def load_config() -> dict:
     return {
         "image": os.environ.get("SESSION_IMAGE", "chaos-overlords:latest"),
         "network": os.environ.get("SESSION_NETWORK", "chaos-net"),
+        # Two different views of the same files, and they are not
+        # interchangeable. GAME_PATH_HOST is the path on the DOCKER HOST, handed
+        # to the daemon to bind-mount into sessions. GAME_DIR is where those
+        # files appear inside THIS container, which is what the manager can
+        # actually read for the gang names.
         "game_path": os.environ.get("GAME_PATH_HOST", ""),
+        "game_dir": os.environ.get("GAME_DIR", "/game"),
         "state_dir": os.environ.get("STATE_DIR", "/data"),
         "web_user": os.environ.get("WEB_USER", "player"),
         "tz": os.environ.get("TZ", "America/Chicago"),

@@ -115,6 +115,29 @@ If you would rather have it swept automatically, set `RETENTION_HOURS` to a
 number of hours; stopped sessions idle for longer than that are removed with
 their data.
 
+## Session names
+
+Sessions are named after the game's own gangs — `sewer-rats`, `pudding-clowns`,
+`brothers-of-the-blade` — rather than random characters, because a session name
+ends up in a URL that gets read out loud and typed by someone else. There are 90
+of them, which is more than anyone will run at once, and they recycle: a name is
+free again as soon as the session holding it is deleted. A stopped session keeps
+its name, because its saves are still there and the name is how a player finds
+them again.
+
+The names are read from **the operator's own game files at run time**, from
+`DATA/Gangs` in the directory mounted at `/game`. They are never baked into the
+image: they are the game's content, the image is published publicly, and the
+same reasoning that keeps the executable and data files out of it applies to a
+list extracted from them.
+
+If the game files are not mounted, or the file cannot be parsed, sessions fall
+back to short random identifiers and the manager says so once at startup.
+Nothing else changes.
+
+Past 90 live sessions a name is reused with a numeric suffix
+(`sewer-rats-2`). That is a formality rather than a plan.
+
 ## Giving each session its own hostname
 
 By default every session lives under the manager's hostname at `/s/<id>/`.

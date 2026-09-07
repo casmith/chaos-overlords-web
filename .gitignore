@@ -6,6 +6,26 @@
 /game/
 /chaos-overlords/
 
+# Archives of the game, however they arrive. `git add -A` once swept a 7 MB
+# chaos.zip and a stray file named after an IP address -- an scp missing its
+# colon -- into a public commit. `/chaos/` matched neither, and the check that
+# grepped for "^chaos/" and ".exe" did not either. Nothing here needs to track
+# an archive, so refuse the whole class rather than those two names.
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.*
+*.iso
+
+# `scp file user@host` with the colon left out writes a local file named after
+# the host. Those are always accidents.
+[0-9]*.[0-9]*.[0-9]*.[0-9]*
+
+# --- Python build artefacts ---------------------------------------------------
+__pycache__/
+*.py[cod]
+
 # --- Local configuration -----------------------------------------------------
 /.env
 

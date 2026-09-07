@@ -19,7 +19,7 @@ COPY requirements.txt .
 RUN set -eux; \
     pip install --no-cache-dir -r requirements.txt
 
-COPY app.py sessions.py proxy.py web_ui.py session_auth.py accounts.py tls.py ./
+COPY app.py sessions.py proxy.py web_ui.py session_auth.py accounts.py tls.py gangs.py ./
 
 RUN set -eux; \
     useradd -u 1000 -m manager; \
