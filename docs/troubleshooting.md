@@ -371,8 +371,24 @@ The game is 2D and undemanding; if it stutters, something else is wrong.
 docker stats chaos1
 ```
 
-Wine burning a full core at idle usually means a debug channel is enabled —
-confirm `DEBUG=false` (which sets `WINEDEBUG=-all`).
+## A session sits at 100% CPU
+
+Expected usage is about 5% of a core at idle. A session pinned at ~103% is the
+game's message loop spinning: it peeks for a message, finds none, yields, and
+does that 10,500 times a second. The image preloads a shim that sleeps instead.
+Check whether it is active:
+
+```bash
+docker logs chaos1 2>&1 | grep 'Yield shim'
+```
+
+`Yield shim active: sleeping 500us instead of spinning` is what you want.
+`Yield shim disabled` means `WINE_YIELD_SLEEP_US=0` is set somewhere — unset it,
+or set it back to `500`.
+
+If the shim is active and the session is still at 100%, check that a debug
+channel is not enabled (`DEBUG=false`, which sets `WINEDEBUG=-all`), then see
+[cpu-findings.md](cpu-findings.md) for how the original diagnosis was made.
 
 ## Saves disappeared
 

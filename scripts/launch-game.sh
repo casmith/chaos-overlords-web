@@ -23,6 +23,18 @@ fi
 rel="${game_exe#"${GAME_DIR}"/}"
 win_exe="${GAME_WIN_DIR}\\${rel//\//\\}"
 
+# Stop the message loop from spinning a core. Scoped to the game and the Wine
+# processes it starts rather than set container-wide, so nothing else inherits
+# it. ld.so expands $LIB per process, which is why the path is single-quoted --
+# the 32-bit game and the 64-bit wineserver each get the right object.
+YIELD_SHIM='/usr/local/$LIB/yieldsleep.so'
+if [ "${WINE_YIELD_SLEEP_US}" != "0" ] && [ -e /usr/local/lib/i386-linux-gnu/yieldsleep.so ]; then
+    export LD_PRELOAD="${YIELD_SHIM}${LD_PRELOAD:+:${LD_PRELOAD}}"
+    chaos_log game "Yield shim active: sleeping ${WINE_YIELD_SLEEP_US}us instead of spinning"
+else
+    chaos_log game "Yield shim disabled; expect the game to use a full CPU core"
+fi
+
 chaos_log game "Executable: ${game_exe}"
 chaos_log game "Windows path: ${win_exe}"
 chaos_log game "Working directory: ${GAME_WIN_DIR}"

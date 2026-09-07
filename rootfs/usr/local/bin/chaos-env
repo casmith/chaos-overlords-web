@@ -60,6 +60,14 @@
 # Opus, in bits per second (SPEC section 36 asks for 64-128 kbps).
 : "${AUDIO_BITRATE:=96000}"
 
+# --- CPU ---------------------------------------------------------------------
+# The game's message loop peeks for a message and, finding none, yields --
+# 10,500 times a second, which pins a core to no purpose. launch-game.sh
+# preloads a shim that sleeps this long instead of yielding; see
+# src/yieldsleep.c for the measurements. 0 disables it, restoring the original
+# spin. Anything up to a few milliseconds is imperceptible in a turn-based game.
+: "${WINE_YIELD_SLEEP_US:=500}"
+
 # --- Diagnostics -------------------------------------------------------------
 # Raw VNC, superseded by Selkies. Kept for debugging the X session directly.
 : "${ENABLE_VNC:=false}"
@@ -106,6 +114,7 @@ export ENABLE_SELKIES WEB_PORT ENABLE_HTTPS WEB_USER WEB_PASSWORD WEB_SUBFOLDER
 export VIDEO_ENCODER VIDEO_FPS VIDEO_BITRATE AUDIO_BITRATE
 export ENABLE_VNC VNC_PORT
 export DEBUG GAME_RESTART_DELAY GAME_MAX_RESTARTS APP_USER APP_GROUP TZ
+export WINE_YIELD_SLEEP_US
 export WINEDEBUG WINEDLLOVERRIDES
 
 # --- Logging -----------------------------------------------------------------

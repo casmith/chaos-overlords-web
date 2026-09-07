@@ -23,6 +23,28 @@
 ARG SELKIES_IMAGE=ghcr.io/selkies-project/selkies/base@sha256:967edbbfce557e5cf0be12d9ef7e54d6fdd2457fcb00b75cc8f4a1595e02f6e3
 FROM ${SELKIES_IMAGE} AS selkies
 
+# ---------------------------------------------------------------------------
+# yieldsleep build stage.
+#
+# A ~40-line LD_PRELOAD that stops the game's message loop from spinning a whole
+# core on an empty queue: 103% of a CPU down to under 5%. The reasoning and the
+# measurements are in src/yieldsleep.c. Built in its own stage so the runtime
+# image carries no compiler; both word sizes are needed because Wine's Windows
+# processes are 32-bit here and wineserver is not.
+# ---------------------------------------------------------------------------
+FROM debian:trixie-slim AS yieldsleep
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gcc gcc-multilib libc6-dev libc6-dev-i386; \
+    rm -rf /var/lib/apt/lists/*
+COPY src/yieldsleep.c /tmp/yieldsleep.c
+RUN set -eux; \
+    mkdir -p /out/i386-linux-gnu /out/x86_64-linux-gnu; \
+    gcc -m32 -O2 -Wall -Wextra -Werror -fPIC -shared \
+        -o /out/i386-linux-gnu/yieldsleep.so /tmp/yieldsleep.c; \
+    gcc      -O2 -Wall -Wextra -Werror -fPIC -shared \
+        -o /out/x86_64-linux-gnu/yieldsleep.so /tmp/yieldsleep.c
+
 FROM debian:trixie-slim
 
 ARG S6_OVERLAY_VERSION=3.2.3.2
@@ -139,6 +161,11 @@ RUN set -eux; \
 COPY --from=selkies /usr/local/lib/${SELKIES_PYTHON}/dist-packages /usr/local/lib/${SELKIES_PYTHON}/dist-packages
 COPY --from=selkies /usr/local/bin/selkies /usr/local/bin/selkies-resize /usr/local/bin/selkies-gpu-probe /usr/local/bin/
 
+# ld.so expands $LIB in LD_PRELOAD to "lib/<triplet>", so a single
+# /usr/local/$LIB/yieldsleep.so picks the right word size per process and
+# neither the 32-bit game nor the 64-bit wineserver logs a preload error.
+COPY --from=yieldsleep /out/ /usr/local/lib/
+
 # Fail the build here rather than at run time if a shared library is missing:
 # an unresolved symbol in pixelflux or pcmflux would otherwise surface as a
 # blank browser tab with a Python traceback buried in the container log.
@@ -150,6 +177,18 @@ RUN set -eux; \
     done; \
     python3 -c "import selkies, pixelflux, pcmflux; print('selkies imports cleanly')"; \
     selkies --help > /dev/null
+
+# The preload is silently ignored by ld.so if it is missing or the wrong class,
+# and the only symptom would be a session quietly back at 100% CPU.
+RUN set -eux; \
+    for want in i386-linux-gnu:1 x86_64-linux-gnu:2; do \
+        dir="${want%:*}"; class="${want#*:}"; \
+        got="$(dd if=/usr/local/lib/$dir/yieldsleep.so bs=1 skip=4 count=1 2>/dev/null | od -An -tu1 | tr -d ' \n')"; \
+        [ "$got" = "$class" ] || { echo "$dir/yieldsleep.so is ELF class $got, wanted $class"; exit 1; }; \
+    done; \
+    out="$(LD_PRELOAD='/usr/local/$LIB/yieldsleep.so' /bin/true 2>&1)"; \
+    [ -z "$out" ] || { echo "$out"; exit 1; }; \
+    echo "yieldsleep preloads cleanly"
 
 # ---------------------------------------------------------------------------
 # Project files.
@@ -177,6 +216,7 @@ ENV CONFIG_DIR=/config \
     WINE_WINDOWS_VERSION=win98 \
     WINE_VIRTUAL_DESKTOP=true \
     PATCH_DIALOG_VISIBILITY=true \
+    WINE_YIELD_SLEEP_US=500 \
     DISPLAY=:0 \
     DISPLAY_WIDTH=640 \
     DISPLAY_HEIGHT=480 \

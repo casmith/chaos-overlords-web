@@ -310,7 +310,7 @@ link they can actually use.
 | `IDLE_MINUTES` | `30` | Stop a session after this long with nobody watching |
 | `RETENTION_HOURS` | `0` | Delete a stopped session's saves after this long; `0` keeps them indefinitely |
 | `SESSION_MEM_LIMIT` | `1g` | Memory cap per session |
-| `SESSION_CPU_LIMIT` | `2` | CPU cap per session |
+| `SESSION_CPU_LIMIT` | `2` | CPU cap per session. A ceiling, not a reservation: a session idles at about 0.05 of a core (see [cpu-findings.md](cpu-findings.md)), so this only caps the damage if the yield shim is turned off |
 | `SESSION_ENV` | empty | Extra env for sessions, e.g. `VIDEO_FPS=30,DEBUG=true` |
 | `SESSION_IMAGE` | `chaos-overlords:latest` | Game image to start |
 | `SESSION_NETWORK` | `chaos-net` | Network sessions join |

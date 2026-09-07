@@ -34,6 +34,8 @@ services:
       WINE_WINDOWS_VERSION: ${WINE_WINDOWS_VERSION:-win98}
       WINE_VIRTUAL_DESKTOP: ${WINE_VIRTUAL_DESKTOP:-true}
       PATCH_DIALOG_VISIBILITY: ${PATCH_DIALOG_VISIBILITY:-true}
+      # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
+      WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
       VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
       VIDEO_FPS: ${VIDEO_FPS:-30}
@@ -75,6 +77,8 @@ services:
       WINE_WINDOWS_VERSION: ${WINE_WINDOWS_VERSION:-win98}
       WINE_VIRTUAL_DESKTOP: ${WINE_VIRTUAL_DESKTOP:-true}
       PATCH_DIALOG_VISIBILITY: ${PATCH_DIALOG_VISIBILITY:-true}
+      # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
+      WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
       VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
       VIDEO_FPS: ${VIDEO_FPS:-30}
