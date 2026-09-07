@@ -89,6 +89,8 @@ def _session_card(s, cfg, is_new: bool) -> str:
       </div>
       <div class="row" style="margin-top:.8rem">
         <div class="grow"><div class="meta">Link</div><code>{e(url)}</code></div>
+        <div><div class="meta">Username</div>
+             <code class="pw">{e(cfg.get("web_user", "player"))}</code></div>
         <div><div class="meta">Password</div>
              <code class="pw">{e(s.password)}</code></div>
       </div>
@@ -126,9 +128,13 @@ def render_page(sessions, cfg, new_id: str = "") -> str:
     </div>
   </form>
 
-  <p class="note">Send a player their link and password. Closing the tab leaves
-     the game running for a few more minutes, then it stops and the save is kept
-     &mdash; opening the link again brings it straight back.</p>
+  <p class="note"><strong>Send a player all three:</strong> the link, the
+     username and the password. Opening the link prompts for the username and
+     password &mdash; that prompt is the session's own, and is separate from the
+     login for this page.<br>
+     Closing the tab leaves the game running for a few more minutes, then it
+     stops and the save is kept &mdash; opening the link again brings it
+     straight back.</p>
 </div></body></html>"""
 
 

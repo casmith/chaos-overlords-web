@@ -183,7 +183,9 @@ async def session_proxy(request: web.Request) -> web.StreamResponse:
         else:
             return web.Response(
                 status=401, text="This session has its own password.",
-                headers={"WWW-Authenticate": f'Basic realm="Chaos Overlords session {sid}"'})
+                headers={"WWW-Authenticate": (
+                    f'Basic realm="Chaos Overlords session {sid} '
+                    f'- username: {cfg["web_user"]}"')})
 
     if session.status == "stopped":
         # Bring it back rather than showing an error: the player followed a
