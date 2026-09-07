@@ -21,7 +21,7 @@ to the internet. This is the preferred deployment model.
 |---|---|---|
 | Browser streaming (Selkies, WebSocket) | 8080 in-container | implemented |
 | Diagnostic view (raw VNC, no audio) | 5900 in-container | off unless `ENABLE_VNC=true` |
-| Chaos Overlords multiplayer | **unknown — do not guess** | Phase 4/5 |
+| Chaos Overlords multiplayer | **TCP 4269** | measured; host listens, joiner connects |
 
 ### The streaming port
 
@@ -52,29 +52,36 @@ docker exec chaos1 getent hosts chaos2
 docker exec chaos1 ping -c1 chaos2      # if iputils is present
 ```
 
-Start with bridge networking (SPEC rule 11). Only move to macvlan/ipvlan if
-Phase 5 testing proves the game needs to appear as an independent host on the
-physical LAN — for example if it uses subnet broadcast for game discovery and
-the join dialog offers no way to type an IP address.
+Start with bridge networking (SPEC rule 11). **Testing shows bridge networking
+is sufficient**: the joiner types the host's address, and no broadcast discovery
+is involved, so there is nothing for a bridge to break. Per SPEC rule 12, the
+macvlan work below stays unbuilt.
 
 ## Multiplayer ports
 
-**Not yet determined.** Per SPEC rule 13 these must be discovered, not guessed.
-The procedure is in [multiplayer-testing.md](multiplayer-testing.md); the
-findings get recorded here once Phase 4/5 runs.
+Measured, not guessed. Full detail in
+[multiplayer-findings.md](multiplayer-findings.md).
 
-<!-- Fill in during Phase 5:
-| Protocol | Port(s) | Direction | Notes |
+| Protocol | Port | Direction | Notes |
 |---|---|---|---|
-| TCP | ? | client → host | |
-| UDP | ? | ? | |
-| Broadcast | ? | | |
--->
+| TCP | **4269** | joiner → host | host binds `0.0.0.0:4269`, listen backlog 1 |
+| TCP | ephemeral | joiner's source | e.g. `172.18.0.6:42050 -> 172.18.0.5:4269` |
+| UDP | none | — | none observed |
+| Broadcast | none | — | the joiner types the host's IP address |
 
-## macvlan (only if required)
+The game uses plain WinSock (`WSOCK32.dll`), **not DirectPlay** — there is no
+`dplayx.dll` import, so no DirectPlay port range and no winetricks `directplay`
+verb is needed.
 
-If broadcast discovery turns out to be mandatory, each container can be given
-its own address on the physical LAN. Sketch, to be validated in Phase 5:
+Nothing has to be published to the host for players to play each other: the
+containers reach one another on the `chaos-net` bridge. Only publish 4269 if a
+player outside that network needs to join.
+
+## macvlan (not required)
+
+Kept only for the case where players must reach each other across a physical
+LAN rather than a Docker network. It is **not** needed for container-to-container
+play. Untested sketch:
 
 ```yaml
 networks:

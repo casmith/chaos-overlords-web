@@ -16,6 +16,12 @@
 : "${WINEARCH:=win32}"
 : "${WINE_WINDOWS_VERSION:=win98}"
 : "${WINE_VIRTUAL_DESKTOP:=true}"
+# Wine shows a modal dialog only when its template already carries WS_VISIBLE,
+# and three of this game's dialogs -- including Host Game and Join Game -- do
+# not. Without this the game sits in a modal loop over a window that was never
+# mapped, which looks exactly like a hang. Patches a copy in the prefix; the
+# mounted game files are never touched.
+: "${PATCH_DIALOG_VISIBILITY:=true}"
 
 # --- Display -----------------------------------------------------------------
 : "${DISPLAY:=:0}"
@@ -78,6 +84,7 @@ fi
 
 export CONFIG_DIR GAME_DIR GAME_WIN_DIR GAME_UNIX_DIR
 export WINEPREFIX WINEARCH WINE_WINDOWS_VERSION WINE_VIRTUAL_DESKTOP
+export PATCH_DIALOG_VISIBILITY
 export DISPLAY DISPLAY_WIDTH DISPLAY_HEIGHT DISPLAY_DEPTH
 export ENABLE_AUDIO PULSE_SINK_NAME PULSE_RUNTIME_PATH PULSE_SERVER
 export ENABLE_SELKIES WEB_PORT ENABLE_HTTPS WEB_USER WEB_PASSWORD WEB_SUBFOLDER

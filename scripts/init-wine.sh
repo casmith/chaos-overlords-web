@@ -104,6 +104,58 @@ for entry in "${GAME_DIR}"/*; do
 done
 chaos_log wine "${linked} game entries available at ${GAME_WIN_DIR}"
 
+# --- Make the game's modal dialogs visible under Wine -----------------------
+# Wine's user32 shows a DialogBoxParam dialog only when the template already
+# carries WS_VISIBLE (dlls/user32/dialog.c). Three of this game's templates do
+# not -- Host Game, Join Game and one more -- so under Wine the game enters a
+# modal message loop over a window that is never mapped. The game stops
+# responding and looks hung; multiplayer is unreachable.
+#
+# The fix is a copy of the executable inside the prefix with WS_VISIBLE set on
+# those templates. The mounted game files stay read-only and untouched, and
+# SPEC section 3 allows patching to the extent Wine compatibility requires.
+patch_game_dialogs() {
+    local src rel dst stamp src_id
+    src="$1"
+    rel="${src#"${GAME_DIR}"/}"
+    dst="${GAME_UNIX_DIR}/${rel}"
+    stamp="${CONFIG_DIR}/state/dialog-patch"
+    src_id="$(stat -c '%s:%Y' "${src}" 2>/dev/null)"
+
+    if [ "${PATCH_DIALOG_VISIBILITY}" != "true" ]; then
+        # Turned off after having been on: put the plain symlink back rather
+        # than silently keeping a patched copy the operator asked us to drop.
+        if [ -f "${stamp}" ]; then
+            chaos_log wine "Dialog visibility patch disabled; restoring the unmodified executable"
+            rm -f "${dst}" "${stamp}"
+            ln -sfn "${src}" "${dst}"
+        else
+            chaos_log wine "Dialog visibility patch disabled; Host/Join dialogs will not appear"
+        fi
+        return 0
+    fi
+
+    # Already patched from this exact source file: nothing to do.
+    if [ -f "${dst}" ] && [ ! -L "${dst}" ] && \
+       [ "$(cat "${stamp}" 2>/dev/null)" = "${src_id}" ]; then
+        chaos_log wine "Game executable already patched for dialog visibility"
+        return 0
+    fi
+
+    chaos_log wine "Patching game executable so Wine shows its modal dialogs"
+    rm -f "${dst}"
+    if python3 /opt/chaos/scripts/patch-dialogs.py "${src}" "${dst}" 2>&1 | sed 's/^/[wine] /'; then
+        printf '%s' "${src_id}" > "${stamp}"
+    else
+        chaos_err wine "Dialog patch failed; falling back to the unmodified executable."
+        chaos_err wine "The game will run, but Host Game and Join Game will appear to hang."
+        rm -f "${dst}" "${stamp}"
+        ln -sfn "${src}" "${dst}"
+    fi
+}
+
+patch_game_dialogs "${game_exe}"
+
 # --- Import the game's shipped registry file --------------------------------
 # Chaos Overlords ships chaosreg.reg containing its serial number and default
 # preferences; without it the game re-runs first-time setup on every launch.

@@ -15,8 +15,8 @@ your own copy.
 | 1 | Game runs under Wine in Docker | **implemented and verified** |
 | 2 | Browser video, mouse, keyboard (Selkies) | **implemented and verified** |
 | 3 | Game audio in the browser | wired, not verified |
-| 4 | Two-instance TCP/IP multiplayer | not started |
-| 5 | Network discovery testing | not started |
+| 4 | Two-instance TCP/IP multiplayer | connect verified; full game untested |
+| 5 | Network discovery testing | **done** — TCP 4269, bridge networking is enough |
 | 6 | Productionisation | partly in place |
 
 You open a URL and play the game. Nothing to install: no Wine, no VNC client,
@@ -195,6 +195,7 @@ All of these are set in `.env` or per-service in `docker-compose.yml`.
 | `WINEARCH` | `win32` | Must stay `win32`; the game is a 32-bit binary |
 | `WINE_WINDOWS_VERSION` | `win98` | `win95`, `win98`, `win2k`, `winxp` |
 | `WINE_VIRTUAL_DESKTOP` | `true` | Contain the game in a Wine desktop window |
+| `PATCH_DIALOG_VISIBILITY` | `true` | Patch a copy of the game in the prefix so Wine shows its Host/Join dialogs. Without it multiplayer appears to hang. Your game files are never modified |
 | `ENABLE_AUDIO` | `true` | Run PulseAudio with a null sink |
 | `ENABLE_SELKIES` | `true` | Browser streaming |
 | `WEB_PORT` | `8080` | In-container streaming port |
@@ -263,11 +264,22 @@ docker compose up -d chaos1
 
 ## Multiplayer
 
-Containers share the `chaos-net` bridge network and can reach each other by
-name. The game's own multiplayer ports have **not** been determined yet —
-they will be observed rather than guessed, following the procedure in
-[docs/multiplayer-testing.md](docs/multiplayer-testing.md). Findings land in
-[docs/networking.md](docs/networking.md).
+Containers share the `chaos-net` bridge network and reach each other by name.
+The game speaks plain WinSock TCP on **port 4269** — not DirectPlay — and the
+joiner types the host's address, so Docker bridge networking is all it needs.
+
+**Starting a game is not obvious**, and getting it wrong looks like the game has
+frozen:
+
+1. **Comm → WinSock** on both players. The `Comm` menu picks the transport and
+   ships set to `None`, which greys out Host and Join.
+2. **File → Host Game…** (Ctrl+H) on one. Pick an address, press OK.
+3. **File → Join Game…** (Ctrl+J) on the other. Type the host's address.
+
+Under Wine those dialogs are invisible unless the container patches the game —
+see `PATCH_DIALOG_VISIBILITY` below and
+[docs/multiplayer-findings.md](docs/multiplayer-findings.md) for the whole
+story.
 
 Note that the two network paths are independent: a remote player streams from a
 container over HTTPS, while the game instances talk to each other on the
@@ -302,6 +314,7 @@ attack surface in front of emulated 1990s software.
 - [Game files](docs/game-files.md) — what to supply and where to put it
 - [Phase 1 findings](docs/phase-1-findings.md) — Wine, and why the display is 640×480
 - [Phase 2 findings](docs/phase-2-findings.md) — Selkies packaging, and what was verified
+- [Multiplayer findings](docs/multiplayer-findings.md) — the protocol, the port, and the Wine dialog bug
 - [Architecture](docs/architecture.md) — process tree, startup, filesystem layout
 - [Networking](docs/networking.md) — the two network paths, ports, macvlan
 - [Multiplayer testing](docs/multiplayer-testing.md) — how the ports get discovered

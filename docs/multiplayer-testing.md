@@ -1,11 +1,14 @@
 # Multiplayer testing procedure
 
-**Status: not yet executed.** This is the plan for Phases 4 and 5. Fill in the
-Findings section as you go, and copy the conclusions into
-[networking.md](networking.md).
+**Status: connectivity established.** Two containers have been connected host
+to joiner; the protocol and port are recorded in
+[multiplayer-findings.md](multiplayer-findings.md) and
+[networking.md](networking.md). What remains is playing a full game to
+completion and trying three and four players.
 
-Nothing here is blocked any more: both players are playable in a browser as of
-Phase 2, so this only needs someone to sit down and drive two sessions.
+Read [multiplayer-findings.md](multiplayer-findings.md) first — it covers the
+non-obvious `Comm → WinSock` step and the Wine dialog bug that made both hosting
+and joining look like a hang.
 
 Do not guess the game's ports. Observe them.
 
@@ -89,32 +92,27 @@ Watch `docker logs` on both containers for Wine errors during play.
 
 ## Findings
 
-_Not yet gathered._
-
 ```
-Date:
-Wine version:
-Windows version reported to the game:
+Wine version:                  10.0 (Debian 10.0~repack-6)
+Windows version:               win98
 
-Host instance listening sockets:
-Client instance sockets:
-Broadcast observed:            yes / no
-Address entry available:       yes / no
-DirectPlay in use:             yes / no
-Bridge networking sufficient:  yes / no
-Stable for a full game:        yes / no
+Host listening socket:         0.0.0.0:4269 TCP, listen backlog 1
+Joiner socket:                 ephemeral -> host:4269 TCP
+Broadcast observed:            no
+Address entry available:       yes ("Please enter the IP Address of the Host")
+DirectPlay in use:             no (WSOCK32.dll, no dplayx import)
+Bridge networking sufficient:  yes
+Stable for a full game:        NOT YET TESTED
 ```
 
-## Known unknowns
+## Resolved unknowns
 
-Worth being ready for, none of them confirmed yet:
-
-- **DirectPlay.** A 1997 Windows title may use DirectPlay rather than raw
-  sockets. Wine's built-in `dplayx` is incomplete, and the shipped registry's
-  `commType=0` hints the game has more than one communications backend. If
-  DirectPlay is in play, the winetricks `directplay` verb (native DirectX
-  DirectPlay DLLs) is the first thing to try — and would be the first
-  winetricks component this project adds, per SPEC section 14.
-- **Player identity.** Instances share a Wine prefix layout but have separate
-  volumes, so player names and settings are already independent.
-- **Save synchronisation** is explicitly out of scope (SPEC section 3).
+- **DirectPlay** is not used. The game imports `WSOCK32.dll` and no `dplayx`,
+  so Wine's incomplete DirectPlay is not in the path and no winetricks
+  component is needed.
+- **`commType=0`** in the shipped registry does mean a communications backend
+  choice — the `Comm` menu offers None / WinSock / Modem / Direct Connect, and
+  it ships on **None**, which greys out Host and Join. Select WinSock first.
+- **Player identity.** Separate `/config` volumes already keep player names and
+  settings independent.
+- **Save synchronisation** remains out of scope (SPEC section 3).

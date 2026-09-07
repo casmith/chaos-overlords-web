@@ -140,6 +140,52 @@ Common causes:
   ```
 - **Wrong Windows version.** Try `WINE_WINDOWS_VERSION=win95` or `winxp`.
 
+## Hosting or joining a multiplayer game freezes the game
+
+Two different causes, in order of likelihood.
+
+**The Comm menu is still set to None.** `Comm` selects the transport, not the
+game. It ships on `None`, which greys out `Host Game` and `Join Game` in the
+File menu. Select **Comm → WinSock** first, on every player.
+
+**The dialogs are invisible.** Wine displays a modal dialog only when its
+template carries `WS_VISIBLE`, and three of this game's do not — including Host
+and Join. The game enters a modal message loop over a window that was never
+mapped: it stops responding to the menu bar, with nothing on screen to click.
+
+The container patches a copy of the executable inside the Wine prefix to fix
+this, controlled by `PATCH_DIALOG_VISIBILITY` (default `true`). Confirm it ran:
+
+```bash
+docker logs chaos1 | grep -i dialog
+# [wine] Patching game executable so Wine shows its modal dialogs
+# [wine] patch-dialogs: 3 of 27 dialog templates made visible
+```
+
+If it did not, check that the executable in the prefix is a real file rather
+than a symlink:
+
+```bash
+docker exec chaos1 ls -l '/config/wine/drive_c/games/Chaos/Chaos Overlords.exe'
+```
+
+To force a re-patch:
+
+```bash
+docker exec chaos1 rm -f /config/state/dialog-patch
+docker restart chaos1
+```
+
+Background: [multiplayer-findings.md](multiplayer-findings.md).
+
+## Multiplayer connects but you want to check the wire
+
+```bash
+docker exec chaos1 ss -lntp | grep 4269     # host is listening
+docker exec chaos2 ss -tnp  | grep 4269     # joiner is connected
+docker exec chaos1 detect-network.sh
+```
+
 ## Wine error dialog on screen
 
 That is intended — dialogs stay visible rather than being suppressed. Read it
