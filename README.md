@@ -14,7 +14,7 @@ your own copy.
 |---|---|---|
 | 1 | Game runs under Wine in Docker | **implemented and verified** |
 | 2 | Browser video, mouse, keyboard (Selkies) | **implemented and verified** |
-| 3 | Game audio in the browser | wired, not verified |
+| 3 | Game audio in the browser | **works** (sound effects; music needs the CD) |
 | 4 | Two-instance TCP/IP multiplayer | connect verified; full game untested |
 | 5 | Network discovery testing | **done** — TCP 4269, bridge networking is enough |
 | 6 | Productionisation | partly in place |
@@ -25,8 +25,11 @@ no browser extension. Video, mouse and keyboard are verified working in both
 Firefox and Chrome, and a full game has been started end to end through the
 browser input path.
 
-Audio rides the same connection and is configured, but nobody has confirmed
-hearing it yet — that is Phase 3. Multiplayer between containers is Phase 4.
+Audio rides the same connection and works. Two caveats worth knowing up front:
+the in-game volume sliders do nothing (the game drives them through an API Wine
+has no device for — use the browser's volume instead), and there is no music
+unless you have the original CD, because the soundtrack is Red Book CD audio.
+Both are explained in [docs/audio-findings.md](docs/audio-findings.md).
 
 What testing established is in
 [docs/phase-1-findings.md](docs/phase-1-findings.md) and
@@ -327,6 +330,7 @@ attack surface in front of emulated 1990s software.
 - [Game files](docs/game-files.md) — what to supply and where to put it
 - [Phase 1 findings](docs/phase-1-findings.md) — Wine, and why the display is 640×480
 - [Phase 2 findings](docs/phase-2-findings.md) — Selkies packaging, and what was verified
+- [Audio findings](docs/audio-findings.md) — why volume and music behave as they do
 - [Multiplayer findings](docs/multiplayer-findings.md) — the protocol, the port, and the Wine dialog bug
 - [Architecture](docs/architecture.md) — process tree, startup, filesystem layout
 - [Networking](docs/networking.md) — the two network paths, ports, macvlan

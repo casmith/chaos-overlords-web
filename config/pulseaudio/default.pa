@@ -11,8 +11,15 @@
 # through the streaming service.
 load-module module-native-protocol-unix socket=/run/pulse/native auth-anonymous=1
 
-# The virtual output device.
-load-module module-null-sink sink_name=chaos-out sink_properties=device.description="Chaos_Overlords_Output"
+# The virtual output device, pinned to 48 kHz.
+#
+# This rate is not arbitrary. Opus encodes at 48 kHz, so pcmflux asks the
+# monitor for 48 kHz; leaving the sink at PulseAudio's 44.1 kHz default meant
+# the audio was resampled twice on its way to the browser -- 22.05 kHz (the
+# game's own 8-bit mono WAVs) to 44.1, then 44.1 to 48 -- both times with
+# speex-float-1, PulseAudio's lowest-quality resampler. Matching the sink to
+# Opus removes the second resample entirely.
+load-module module-null-sink sink_name=chaos-out rate=48000 channels=2 format=s16le sink_properties=device.description="Chaos_Overlords_Output"
 
 # Keep clients from being moved to some other (non-existent) device.
 load-module module-always-sink

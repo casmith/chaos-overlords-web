@@ -321,6 +321,48 @@ INFO:data_websocket:pcmflux audio capture state: running.
 If the device name is wrong there, `PULSE_SINK_NAME` and the sink created by
 `config/pulseaudio/default.pa` have drifted apart.
 
+## The in-game volume slider does nothing
+
+It cannot work under Wine. The game sets volume through the old auxiliary audio
+API (`auxSetVolume`), and Wine's audio drivers register no aux device, so the
+call fails and the game never finds out.
+
+Use the audio control in the Selkies sidebar, or your browser's per-tab volume.
+Both sit after the game in the chain. See
+[audio-findings.md](audio-findings.md).
+
+## There is no music
+
+Expected without the original CD. The soundtrack is Red Book CD audio, which the
+game asks for through MCI:
+
+```bash
+docker logs chaos1 2>&1 | grep -i mci
+# MCI_Open devType=L"cdaudio" !
+# MCI_Open Failed to open driver (MCI_OPEN_DRIVER) [0000010a], closing
+```
+
+Ripped data files cannot supply it — Red Book tracks are not files on the data
+track. Sound effects are unaffected and work normally.
+
+## Audio sounds rough
+
+Some of it is the source: every sound effect the game ships is 8-bit mono
+22050 Hz, which is audibly gritty by design.
+
+The container resamples once, 22.05 kHz to the 48 kHz Opus wants, with
+`speex-float-5`. To check whether the grit is already in the sink or is being
+added afterwards, capture the monitor while the sound plays:
+
+```bash
+docker exec chaos1 parec --device=chaos-out.monitor --file-format=wav /tmp/c.wav
+docker cp chaos1:/tmp/c.wav .
+```
+
+If that recording is clean, raise `AUDIO_BITRATE` (96000 → 128000). If it is
+already rough, try `resample-method = soxr-vhq` in
+`config/pulseaudio/daemon.conf`.
+
 ## Slow or stuttering
 
 The game is 2D and undemanding; if it stutters, something else is wrong.

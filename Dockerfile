@@ -163,7 +163,8 @@ RUN set -eux; \
     ln -sf /opt/chaos/scripts/healthcheck.sh /usr/local/bin/healthcheck.sh; \
     ln -sf /opt/chaos/scripts/detect-network.sh /usr/local/bin/detect-network.sh; \
     ln -sf /opt/chaos/scripts/init-wine.sh /usr/local/bin/init-wine.sh; \
-    cp /opt/chaos/config/pulseaudio/client.conf /etc/pulse/client.conf
+    cp /opt/chaos/config/pulseaudio/client.conf /etc/pulse/client.conf; \
+    cp /opt/chaos/config/pulseaudio/daemon.conf /etc/pulse/daemon.conf
 
 # ---------------------------------------------------------------------------
 # Defaults (SPEC section 25). Everything here is overridable per container.
