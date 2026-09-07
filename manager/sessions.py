@@ -32,6 +32,7 @@ LABEL_MANAGED = "chaos.managed"
 # manager's state is lost, sessions are rebuilt from the volumes themselves.
 LABEL_PASSWORD = "chaos.session.password"
 LABEL_LABEL = "chaos.session.label"
+LABEL_OWNER = "chaos.session.owner"
 LABEL_CREATED = "chaos.session.created"
 
 # Ambiguous characters are left out: these get read off a screen and typed by
@@ -57,6 +58,9 @@ class Session:
     last_seen: float = field(default_factory=time.time)
     status: str = "starting"          # starting | ready | stopped
     active_conns: int = 0             # live proxied WebSockets
+    # Who may see and manage this session on the landing page. Empty means the
+    # admin created it; otherwise the name a guest signed in with.
+    owner: str = ""
 
     @property
     def container_name(self) -> str:
@@ -134,6 +138,7 @@ class SessionManager:
                     LABEL_SESSION: session.id,
                     LABEL_PASSWORD: session.password,
                     LABEL_LABEL: session.label,
+                    LABEL_OWNER: session.owner,
                     LABEL_CREATED: str(int(session.created)),
                 },
             )
@@ -232,18 +237,26 @@ class SessionManager:
             created = float(labels.get(LABEL_CREATED) or time.time())
             self.sessions[sid] = Session(
                 id=sid, password=password, label=labels.get(LABEL_LABEL, ""),
+                owner=labels.get(LABEL_OWNER, ""),
                 created=created, last_seen=created, status="stopped")
             log.info("adopted save volume %s as session %s", v.name, sid)
 
-    async def create(self, label: str = "") -> Session:
+    async def create(self, label: str = "", owner: str = "") -> Session:
         async with self._lock:
             if len([s for s in self.sessions.values() if s.status != "stopped"]) >= self.cfg["max_sessions"]:
                 raise RuntimeError(
                     f"already at the limit of {self.cfg['max_sessions']} live sessions")
+            if owner:
+                mine = [s for s in self.sessions.values() if s.owner == owner]
+                if len(mine) >= self.cfg["max_sessions_per_guest"]:
+                    raise RuntimeError(
+                        f"you already have {len(mine)} session(s); "
+                        "delete one before starting another")
             sid = make_id()
             while sid in self.sessions:
                 sid = make_id()
-            session = Session(id=sid, password=make_password(), label=label.strip()[:40])
+            session = Session(id=sid, password=make_password(),
+                              label=label.strip()[:40], owner=owner)
             self.sessions[sid] = session
             self._save()
 

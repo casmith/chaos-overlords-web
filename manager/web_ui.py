@@ -97,7 +97,8 @@ def _session_card(s, cfg, is_new: bool) -> str:
     </div>"""
 
 
-def render_page(sessions, cfg, new_id: str = "") -> str:
+def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
+                who: str = "") -> str:
     items = sorted(sessions, key=lambda s: s.created, reverse=True)
     cards = "".join(_session_card(s, cfg, s.id == new_id) for s in items) or \
         '<div class="empty">No sessions yet. Start one below.</div>'
@@ -105,6 +106,26 @@ def render_page(sessions, cfg, new_id: str = "") -> str:
     retention_note = ("Saves are kept indefinitely &mdash; nothing is deleted "
                       "unless you delete it." if not hours else
                       f"Saves are kept for {hours} hours after that.")
+    is_admin = role == "admin"
+    intro = ("One container per player, each with its own password."
+             if is_admin else "Start a game, and it is yours alone.")
+    whoami = ("" if is_admin else
+              f'<br>Signed in as <strong>{html.escape(who)}</strong> &mdash; sign in '
+              f'with the same name later to find your games again.')
+    label_field = ('<input type="text" name="label" placeholder="Player name (optional)" '
+                   'maxlength="40">' if is_admin else "")
+    footer = (
+        "<strong>Send a player all three:</strong> the link, the username and the "
+        "password. Opening the link prompts for the username and password &mdash; "
+        "that prompt is the session\u2019s own, and is separate from the login for "
+        "this page.<br>Closing the tab leaves the game running for a few more "
+        "minutes, then it stops and the save is kept &mdash; opening the link again "
+        "brings it straight back."
+        if is_admin else
+        "<strong>Open</strong> takes you to your game; it will ask for the username "
+        "and password shown above. Closing the tab leaves it running for a few more "
+        "minutes, then it stops and your save is kept &mdash; come back to the same "
+        "link any time.")
     starting = any(s.status == "starting" for s in items)
     refresh = '<meta http-equiv="refresh" content="5">' if starting else ""
 
@@ -115,26 +136,20 @@ def render_page(sessions, cfg, new_id: str = "") -> str:
 <style>{STYLE}</style></head>
 <body><div class="wrap">
   <h1><span>Chaos</span> Overlords &mdash; sessions</h1>
-  <p class="sub">One container per player. Each gets its own password, and is
-     shut down after {cfg['idle_minutes']} minutes with nobody watching.
-     {retention_note}</p>
+  <p class="sub">{intro} Each session is shut down after
+     {cfg['idle_minutes']} minutes with nobody watching. {retention_note}
+     {whoami}</p>
 
   {cards}
 
   <form method="post" action="/api/sessions" style="margin-top:1.5rem">
     <div class="row">
-      <input type="text" name="label" placeholder="Player name (optional)" maxlength="40">
+      {label_field}
       <button class="primary" type="submit">New session</button>
     </div>
   </form>
 
-  <p class="note"><strong>Send a player all three:</strong> the link, the
-     username and the password. Opening the link prompts for the username and
-     password &mdash; that prompt is the session's own, and is separate from the
-     login for this page.<br>
-     Closing the tab leaves the game running for a few more minutes, then it
-     stops and the save is kept &mdash; opening the link again brings it
-     straight back.</p>
+  <p class="note">{footer}</p>
 </div></body></html>"""
 
 

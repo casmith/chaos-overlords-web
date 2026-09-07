@@ -105,13 +105,48 @@ If you would rather have it swept automatically, set `RETENTION_HOURS` to a
 number of hours; stopped sessions idle for longer than that are removed with
 their data.
 
+## Letting players start their own
+
+Set `INVITE_PASSWORD` and you stop being the bottleneck. It is a second, shared
+password you hand out once instead of creating a session per player and sending
+three credentials each time.
+
+A player opens the manager, and at the browser prompt types **any name they
+like** plus the invite password. They get their own page:
+
+- a **New session** button, capped at `MAX_SESSIONS_PER_GUEST` (default 2)
+- only **their own** sessions listed, with the link, username and password
+- **Open**, **Stop**, **Resume** and **Delete** on those, and nothing else
+
+The name is what their sessions are filed under, so signing in with the same
+name tomorrow shows them the same games. Admin still sees and controls
+everything.
+
+```
+ADMIN_PASSWORD=...     full control: every session, delete anyone's
+INVITE_PASSWORD=...    create your own, see and manage only your own
+```
+
+**The trust level is "a group of friends".** Everyone shares one invite
+password, so nothing stops a player typing someone else's name to see their
+session card. They already share a secret; the name is a filing label, not an
+identity. What actually protects a game in progress is its own per-session
+password, which is unguessable and different for every session. If you need
+players who cannot see each other's games at all, put a real identity provider
+(Authelia, Authentik, Tailscale) in front of the manager instead.
+
+Someone signing in with the admin username but the invite password gets guest
+access, not admin — the name never confers the role.
+
+Leave `INVITE_PASSWORD` empty to keep session creation admin-only.
+
 ## Security model
 
 Three separate checks, each doing one job:
 
-1. **The landing page** is behind `ADMIN_PASSWORD`. Creating and deleting
-   sessions is an operator action. Leave it unset only on a trusted network —
-   the manager logs a warning at startup if you do.
+1. **The landing page** is behind `ADMIN_PASSWORD`, with optional guest access
+   through `INVITE_PASSWORD` as above. With neither set the page is open to
+   anyone who can reach it — the manager logs a warning at startup if so.
 2. **Each session** is behind its own generated password. The manager checks it
    once, then issues an HMAC-signed, `HttpOnly`, `SameSite=Lax` cookie scoped to
    that session's path, valid 12 hours.
@@ -194,7 +229,9 @@ link they can actually use.
 |---|---|---|
 | `MANAGER_PORT` | `8000` | Host port for the manager |
 | `GAME_PATH_ABS` | — | **Absolute** host path to the game files (required) |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / empty | Login for the landing page |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / empty | Full-control login for the landing page |
+| `INVITE_PASSWORD` | empty | Shared password letting players start their own sessions; empty keeps creation admin-only |
+| `MAX_SESSIONS_PER_GUEST` | `2` | How many sessions one guest name may hold |
 | `PUBLIC_URL` | empty | Base URL shown to players |
 | `ALLOWED_ORIGINS` | empty | Extra permitted browser origins; `*` disables the check |
 | `MAX_SESSIONS` | `6` | Refuse to create more live sessions than this |

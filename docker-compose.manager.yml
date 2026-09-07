@@ -33,6 +33,12 @@ services:
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
 
+      # A second, shared password you can hand to players. Anyone with it signs
+      # in with a name of their choosing, starts their own session, and sees
+      # only their own. Leave empty to keep session creation admin-only.
+      INVITE_PASSWORD: ${INVITE_PASSWORD:-}
+      MAX_SESSIONS_PER_GUEST: ${MAX_SESSIONS_PER_GUEST:-2}
+
       # Shown to players as the base of their link. Set it to whatever hostname
       # your reverse proxy serves, e.g. https://chaos.example.com
       PUBLIC_URL: ${PUBLIC_URL:-}

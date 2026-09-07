@@ -60,6 +60,11 @@ def load_config() -> dict:
         "cpu_limit": os.environ.get("SESSION_CPU_LIMIT", ""),
         "admin_password": os.environ.get("ADMIN_PASSWORD", ""),
         "admin_user": os.environ.get("ADMIN_USER", "admin"),
+        # A second, shared password. Anyone holding it can start a session for
+        # themselves and manage only their own; the admin password keeps full
+        # control. Empty disables guest access entirely.
+        "invite_password": os.environ.get("INVITE_PASSWORD", ""),
+        "max_sessions_per_guest": int(os.environ.get("MAX_SESSIONS_PER_GUEST", "2")),
         "public_url": os.environ.get("PUBLIC_URL", "").rstrip("/"),
         # Extra browser origins permitted to reach a session, comma separated.
         # Same-origin is always allowed; "*" disables the check.
@@ -71,32 +76,69 @@ def load_config() -> dict:
 # Guards the landing page and the session API only. A session's own traffic
 # under /s/ is authenticated by that session's password, inside the container.
 
-def _authorized(request: web.Request) -> bool:
+def _identify(request: web.Request) -> tuple[str, str] | None:
+    """Return (role, name) for the caller, or None when not authenticated.
+
+    Role is "admin" or "guest". A guest signs in with the shared invite
+    password and whatever name they like; that name is what their sessions are
+    filed under, so returning with the same name shows them their own games
+    again. Everyone holding the invite password is trusted not to impersonate
+    each other -- they already share a secret. What actually protects a game in
+    progress is its own per-session password.
+    """
+    import base64
+    import secrets as _s
+
     cfg = request.app["cfg"]
-    if not cfg["admin_password"]:
-        return True
+    if not cfg["admin_password"] and not cfg["invite_password"]:
+        return ("admin", cfg["admin_user"])         # wide open, warned about at startup
+
     header = request.headers.get("Authorization", "")
     if not header.startswith("Basic "):
-        return False
+        return None
     try:
-        import base64
         user, _, password = base64.b64decode(header[6:]).decode().partition(":")
     except Exception:                               # noqa: BLE001 - malformed header
-        return False
-    import secrets as _s
-    return (_s.compare_digest(user, cfg["admin_user"])
-            and _s.compare_digest(password, cfg["admin_password"]))
+        return None
+
+    if (cfg["admin_password"]
+            and _s.compare_digest(user, cfg["admin_user"])
+            and _s.compare_digest(password, cfg["admin_password"])):
+        return ("admin", user)
+
+    if cfg["invite_password"] and _s.compare_digest(password, cfg["invite_password"]):
+        name = (user or "guest").strip()[:40] or "guest"
+        if name == cfg["admin_user"]:
+            # Not the admin password, so do not let the name claim the role.
+            name = "guest"
+        return ("guest", name)
+    return None
 
 
 @web.middleware
 async def auth_middleware(request: web.Request, handler):
     if request.path.startswith("/s/") or request.path == "/healthz":
         return await handler(request)
-    if not _authorized(request):
+    who = _identify(request)
+    if who is None:
+        realm = ("Chaos Overlords \u2014 admin, or your name with the invite password"
+                 if request.app["cfg"]["invite_password"] else "Chaos Overlords")
         return web.Response(
             status=401, text="Authentication required.",
-            headers={"WWW-Authenticate": 'Basic realm="Chaos Overlords"'})
+            headers={"WWW-Authenticate": f'Basic realm="{realm}"'})
+    request["role"], request["who"] = who
     return await handler(request)
+
+
+def _visible(request: web.Request, sessions):
+    """Admins see everything; a guest sees only what they own."""
+    if request.get("role") == "admin":
+        return list(sessions)
+    return [s for s in sessions if s.owner == request.get("who")]
+
+
+def _may_manage(request: web.Request, session) -> bool:
+    return request.get("role") == "admin" or session.owner == request.get("who")
 
 
 # --- UI and API --------------------------------------------------------------
@@ -104,21 +146,26 @@ async def auth_middleware(request: web.Request, handler):
 async def index(request: web.Request) -> web.Response:
     mgr: SessionManager = request.app["mgr"]
     return web.Response(
-        text=render_page(mgr.sessions.values(), request.app["cfg"],
-                         new_id=request.query.get("new", "")),
+        text=render_page(_visible(request, mgr.sessions.values()), request.app["cfg"],
+                         new_id=request.query.get("new", ""),
+                         role=request.get("role", "admin"),
+                         who=request.get("who", "")),
         content_type="text/html")
 
 
 async def api_list(request: web.Request) -> web.Response:
     mgr: SessionManager = request.app["mgr"]
-    return web.json_response({"sessions": [s.public() for s in mgr.sessions.values()]})
+    return web.json_response(
+        {"sessions": [s.public() for s in _visible(request, mgr.sessions.values())]})
 
 
 async def api_create(request: web.Request) -> web.Response:
     mgr: SessionManager = request.app["mgr"]
     data = await request.post()
+    owner = "" if request.get("role") == "admin" else request.get("who", "")
+    label = str(data.get("label", "")) or owner
     try:
-        session = await mgr.create(label=str(data.get("label", "")))
+        session = await mgr.create(label=label, owner=owner)
     except RuntimeError as exc:
         return web.Response(status=409, text=str(exc))
     raise web.HTTPFound(f"/?new={session.id}")
@@ -129,6 +176,8 @@ async def _session_or_404(request: web.Request):
     session = mgr.sessions.get(request.match_info["sid"])
     if session is None:
         raise web.HTTPNotFound(text="No such session.")
+    if not _may_manage(request, session):
+        raise web.HTTPForbidden(text="That is not your session.")
     return mgr, session
 
 
@@ -253,9 +302,12 @@ async def on_startup(app: web.Application) -> None:
     log.info("session manager ready: image=%s network=%s idle=%dm retention=%s max=%d",
              cfg["image"], cfg["network"], cfg["idle_minutes"],
              retention, cfg["max_sessions"])
-    if not cfg["admin_password"]:
-        log.warning("ADMIN_PASSWORD is not set: anyone who can reach this page can "
-                    "create and delete sessions")
+    if not cfg["admin_password"] and not cfg["invite_password"]:
+        log.warning("neither ADMIN_PASSWORD nor INVITE_PASSWORD is set: anyone who "
+                    "can reach this page can create and delete sessions")
+    elif cfg["invite_password"]:
+        log.info("guest sessions enabled: invite password set, %d session(s) per guest",
+                 cfg["max_sessions_per_guest"])
 
 
 async def on_cleanup(app: web.Application) -> None:
