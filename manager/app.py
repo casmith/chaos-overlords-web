@@ -1,11 +1,13 @@
 """Chaos Overlords session manager.
 
-Starts a game container per player on demand, hands out a random password for
-it, proxies the player's browser to it, and reaps it when nobody is watching.
+Starts a game container per player on demand, proxies the player's browser to
+it, and reaps it when nobody is watching.
 
-Sessions publish no ports. The manager is the only route in, which is what
-makes the per-session password meaningful: another player who knows the URL
-still cannot open someone else's game.
+Sessions publish no ports. The manager is the only route in, and it decides who
+gets through: the player who owns a session opens it on their own login, and
+anyone else needs the random password that session was given. So a player who
+knows the URL still cannot open someone else's game, and an owner can still
+deliberately hand a seat to a friend.
 
 TLS is expected to terminate at a reverse proxy in front of this service.
 """
@@ -94,7 +96,8 @@ def load_config() -> dict:
 
 # --- access control ----------------------------------------------------------
 # Guards the landing page and the session API only. A session's own traffic
-# under /s/ is authenticated by that session's password, inside the container.
+# under /s/ is authenticated in handle_session instead: the owner's manager
+# login, or failing that the session's own password.
 
 def _identify(request: web.Request) -> tuple[str, str] | None:
     """Return (role, name) for the caller, or None when not authenticated.
@@ -209,6 +212,30 @@ def _visible(request: web.Request, sessions):
 
 def _may_manage(request: web.Request, session) -> bool:
     return request.get("role") == "admin" or session.owner == request.get("who")
+
+
+def _signed_in_owner(request: web.Request, session) -> bool:
+    """True when whoever is asking is signed in to the manager and this session
+    is theirs to open.
+
+    The per-session password is for *handing a seat to someone else* -- a friend
+    with no account, a second device, someone taking over. It was never meant to
+    make a player type a second password to reach their own game, and before
+    accounts existed there was nothing else to identify them by. Now there is.
+
+    Note this runs on /s/ requests, which the auth middleware deliberately does
+    not guard, so a caller who is not signed in is not an error here: they fall
+    through to the session password, exactly as before.
+    """
+    who = _identify(request)
+    if who is None:
+        return False
+    role, name = who
+    if role == "admin":
+        # An admin can read every session password from the API anyway, so
+        # withholding this would be theatre rather than a boundary.
+        return True
+    return role == "guest" and bool(session.owner) and name == session.owner
 
 
 # --- UI and API --------------------------------------------------------------
@@ -341,15 +368,24 @@ async def handle_session(request: web.Request, sid: str) -> web.StreamResponse:
     cookie = request.cookies.get(session_auth.cookie_name(sid))
     set_cookie = False
     if not session_auth.valid(secret, sid, cookie):
-        if session_auth.check_basic(request.headers.get("Authorization", ""),
-                                    cfg["web_user"], session.password):
+        # The owner's own manager login is proof enough. The browser sends those
+        # credentials here by itself -- this page is under the same origin as
+        # the landing page they signed in on -- so opening your own game asks
+        # for nothing. The page load issues the cookie, and the WebSocket the
+        # game runs on rides that, which is the whole reason the cookie exists.
+        if _signed_in_owner(request, session):
+            set_cookie = True
+        elif session_auth.check_basic(request.headers.get("Authorization", ""),
+                                      cfg["web_user"], session.password):
             set_cookie = True
         else:
             return web.Response(
-                status=401, text="This session has its own password.",
+                status=401,
+                text="Sign in as the player who owns this session, "
+                     "or use the session's own password.",
                 headers={"WWW-Authenticate": (
                     f'Basic realm="Chaos Overlords session {sid} '
-                    f'- username: {cfg["web_user"]}"')})
+                    f'- username: {cfg["web_user"]}, or your own login"')})
 
     if session.status == "stopped":
         # Bring it back rather than showing an error: the player followed a

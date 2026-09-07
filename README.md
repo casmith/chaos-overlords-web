@@ -44,8 +44,10 @@ What testing established is in
 8082. Simple, and what the quick start below covers.
 
 **On-demand sessions** — `docker-compose.manager.yml` starts a small manager
-that creates a container per player when asked, gives each its own random
-password, proxies browsers to it, and shuts it down when nobody is watching.
+that creates a container per player when asked, proxies browsers to it, and
+shuts it down when nobody is watching. A player opens their own game on the
+login they already used; each session also carries a random password, which is
+how you hand a seat to someone with no account.
 One port for your reverse proxy to sit in front of; sessions publish none at
 all, and it serves HTTPS itself so sessions work from other machines without a
 proxy. Set `INVITE_PASSWORD` and players claim their own account and start their
@@ -329,7 +331,7 @@ attack surface in front of emulated 1990s software.
 
 ## Documentation
 
-- [Sessions](docs/sessions.md) — on-demand containers, per-player passwords, idle teardown
+- [Sessions](docs/sessions.md) — on-demand containers, player accounts, idle teardown
 - [Game files](docs/game-files.md) — what to supply and where to put it
 - [Phase 1 findings](docs/phase-1-findings.md) — Wine, and why the display is 640×480
 - [Phase 2 findings](docs/phase-2-findings.md) — Selkies packaging, and what was verified

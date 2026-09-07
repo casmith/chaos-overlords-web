@@ -105,7 +105,7 @@ def _session_card(s, cfg, is_new: bool) -> str:
         <div class="grow"><div class="meta">Link</div><code>{e(url)}</code></div>
         <div><div class="meta">Username</div>
              <code class="pw">{e(cfg.get("web_user", "player"))}</code></div>
-        <div><div class="meta">Password</div>
+        <div><div class="meta">Password <span title="Only needed by someone signing in without an account of their own; you do not need it.">(to share)</span></div>
              <code class="pw">{e(s.password)}</code></div>
       </div>
     </div>"""
@@ -148,22 +148,24 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
   <p class="note">At least six characters. Your browser will ask you to sign in
      again straight afterwards, with the password you just chose.</p>
 </div></body></html>"""
-    intro = ("One container per player, each with its own password."
+    intro = ("One container per player, opened by whoever owns it."
              if is_admin else "Start a game, and it is yours alone.")
     whoami = ("" if is_admin else
               f'<br>Signed in as <strong>{html.escape(who)}</strong>.')
     label_field = ('<input type="text" name="label" placeholder="Player name (optional)" '
                    'maxlength="40">' if is_admin else "")
     footer = (
-        "<strong>Send a player all three:</strong> the link, the username and the "
-        "password. Opening the link prompts for the username and password &mdash; "
-        "that prompt is the session\u2019s own, and is separate from the login for "
-        "this page.<br>Closing the tab leaves the game running for a few more "
-        "minutes, then it stops and the save is kept &mdash; opening the link again "
-        "brings it straight back."
+        "<strong>Open</strong> takes you straight in &mdash; your login here is "
+        "enough for any session you own. The username and password above are for "
+        "<em>someone else</em>: send all three and they can take that seat without "
+        "an account of their own.<br>Closing the tab leaves the game running for a "
+        "few more minutes, then it stops and the save is kept &mdash; opening the "
+        "link again brings it straight back."
         if is_admin else
-        "<strong>Open</strong> takes you to your game; it will ask for the username "
-        "and password shown above. Closing the tab leaves it running for a few more "
+        "<strong>Open</strong> takes you straight to your game &mdash; you are "
+        "already signed in, so it asks for nothing. The username and password above "
+        "are only for handing this seat to someone else; send them all three and "
+        "they need no account.<br>Closing the tab leaves it running for a few more "
         "minutes, then it stops and your save is kept &mdash; come back to the same "
         "link any time.")
     if is_admin:

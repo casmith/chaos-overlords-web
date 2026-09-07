@@ -17,8 +17,9 @@ docker compose -f docker-compose.manager.yml up -d
 ```
 
 Open `https://your-host:8000` — note the **https** — log in with `ADMIN_USER` /
-`ADMIN_PASSWORD`, and press **New session**. You get a link, a username and a
-password to hand to a player.
+`ADMIN_PASSWORD`, and press **New session**. You get a link, which opens
+straight into the game for you, plus a username and password that let someone
+without an account of their own take that seat.
 
 The manager generates its own self-signed certificate, so your browser warns
 once; click through. This is not optional politeness: the streaming client
@@ -49,9 +50,9 @@ chaos-manager :8000
                    chaos-net, no published ports
 ```
 
-Sessions publish **no ports at all**. The manager is the only route in, which
-is what makes the per-session password meaningful: a player who knows another
-player's URL still cannot open their game.
+Sessions publish **no ports at all**. The manager is the only route in, and it
+decides who gets through: a player who knows another player's URL still cannot
+open their game.
 
 Because every byte passes through the manager, idle detection is exact rather
 than a guess — a live WebSocket is a player watching, and its close is them
@@ -181,28 +182,31 @@ password you hand out once instead of creating a session per player and sending
 three credentials each time.
 
 A player opens the manager, and at the browser prompt types **any name they
-like** plus the invite password. They get their own page:
+like** plus the invite password. That **claims** the name: they are made to
+choose their own password before they can do anything else, and from then on the
+invite password will not open that name again. They get their own page:
 
 - a **New session** button, capped at `MAX_SESSIONS_PER_GUEST` (default 2)
-- only **their own** sessions listed, with the link, username and password
+- only **their own** sessions listed, each with a link and a share password
 - **Open**, **Stop**, **Resume** and **Delete** on those, and nothing else
+- **Change your password**
 
-The name is what their sessions are filed under, so signing in with the same
-name tomorrow shows them the same games. Admin still sees and controls
-everything.
+The name is what their sessions are filed under, so signing in tomorrow shows
+them the same games. Admin still sees and controls everything, and can
+**Release** a name whose password has been forgotten — the games survive it.
 
 ```
 ADMIN_PASSWORD=...     full control: every session, delete anyone's
 INVITE_PASSWORD=...    create your own, see and manage only your own
 ```
 
-**The trust level is "a group of friends".** Everyone shares one invite
-password, so nothing stops a player typing someone else's name to see their
-session card. They already share a secret; the name is a filing label, not an
-identity. What actually protects a game in progress is its own per-session
-password, which is unguessable and different for every session. If you need
-players who cannot see each other's games at all, put a real identity provider
-(Authelia, Authentik, Tailscale) in front of the manager instead.
+**The trust level is "a group of friends".** Claiming is first-come: the invite
+password opens any name nobody has taken yet, so it is worth telling players to
+sign in once early rather than on the night. Once a name is claimed it takes its
+own password and nothing else, which is what keeps players from signing in as
+each other. If you need more than that — enrolment you control, revocation,
+audit — put a real identity provider (Authelia, Authentik, Tailscale) in front of
+the manager instead.
 
 Someone signing in with the admin username but the invite password gets guest
 access, not admin — the name never confers the role.
@@ -214,13 +218,39 @@ Leave `INVITE_PASSWORD` empty to keep session creation admin-only.
 Three separate checks, each doing one job:
 
 1. **The landing page** is behind `ADMIN_PASSWORD`, with optional guest access
-   through `INVITE_PASSWORD` as above. With neither set the page is open to
-   anyone who can reach it — the manager logs a warning at startup if so.
-2. **Each session** is behind its own generated password. The manager checks it
-   once, then issues an HMAC-signed, `HttpOnly`, `SameSite=Lax` cookie scoped to
-   that session's path, valid 12 hours.
+   through `INVITE_PASSWORD` and a claimed account as above. With neither
+   password set the page is open to anyone who can reach it — the manager logs a
+   warning at startup if so.
+2. **Each session** admits two kinds of caller: the **player who owns it**, on
+   the login they already used for the landing page, and **anyone else** holding
+   that session's generated password. Either way the manager issues an
+   HMAC-signed, `HttpOnly`, `SameSite=Lax` cookie scoped to that session's path
+   and valid 12 hours; the WebSocket the game runs on rides that cookie.
 3. **Cross-site requests are refused.** A request carrying a browser `Origin`
    that is not the manager's own host gets a 403.
+
+### Why the owner is not asked for the session password
+
+Before accounts existed, the generated password was the only thing that could
+tell one player from another at `/s/<id>/`, so everyone typed it — including the
+person whose game it was. Now the manager knows who is asking, and a player
+opening their own game is asked for nothing: `/s/` is on the same origin as the
+landing page they signed in on, so the browser replays those credentials by
+itself, the page load turns them into the session cookie, and the stream follows.
+
+Verified in a real browser rather than assumed: signed in as `clay`, navigating
+to `clay`'s own session returns 200 and the game, and navigating to a session
+`clay` does not own returns 401 in the same session.
+
+The per-session password stays, because it does a different job now — **handing
+a seat to someone else**. A friend with no account, a second device, someone
+taking over while you cook dinner: send them the link, the username and the
+password and they are in, with no account and no admin involvement. It is also
+what the container's own basic auth checks, so a session is never unprotected
+even to something that reaches it directly on the Docker network.
+
+An admin opens any session without its password. They can already read every
+password from `/api/sessions`, so withholding it would be theatre.
 
 ### Why the manager authenticates instead of the container
 

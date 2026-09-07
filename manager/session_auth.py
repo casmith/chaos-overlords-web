@@ -1,9 +1,11 @@
 """Per-session authentication, done by the manager rather than the browser.
 
-A session is protected by its own generated password. The obvious way to check
-it is to let the session container's HTTP basic auth do the work and have the
-browser replay cached credentials -- but a browser is not reliably willing to
-put an Authorization header on a WebSocket handshake, and the whole game is a
+A session admits its owner on their manager login and everyone else on the
+random password it was given (see app._signed_in_owner). Either way the check
+has to happen here, in the manager. The obvious alternative is to let the
+session container's HTTP basic auth do the work and have the browser replay
+cached credentials -- but a browser is not reliably willing to put an
+Authorization header on a WebSocket handshake, and the whole game is a
 WebSocket. A player would get the page and then sit on "Connecting" forever.
 
 So the manager authenticates instead: basic auth once, then a signed cookie.
