@@ -115,6 +115,42 @@ If you would rather have it swept automatically, set `RETENTION_HOURS` to a
 number of hours; stopped sessions idle for longer than that are removed with
 their data.
 
+## Giving each session its own hostname
+
+By default every session lives under the manager's hostname at `/s/<id>/`.
+Set `SESSION_DOMAIN` to a wildcard domain and each gets a hostname instead:
+
+```
+SESSION_DOMAIN=chaos.example.com
+
+chaos.example.com          the landing page
+ab12cd.chaos.example.com   a session
+```
+
+This needs three things in front of the manager, and no per-session work in any
+of them:
+
+1. A **wildcard DNS record** for `*.chaos.example.com`. Cloudflare allows
+   wildcards to be proxied on every plan now, so a tunnel works.
+2. A **wildcard certificate** covering `chaos.example.com` *and*
+   `*.chaos.example.com` — a wildcard does not cover the bare name.
+3. A proxy that passes the original `Host` through, since that is what the
+   manager routes on. `X-Forwarded-Host` is honoured too.
+
+Nothing is created or destroyed in DNS as sessions come and go: one wildcard
+covers all of them, so a session is reachable the moment its container is up,
+and there is nothing to clean up when it is reaped. That is why this is
+preferred over minting a record per session — and why the manager needs no DNS
+credentials.
+
+The mode is recorded per session when its container is created, not read live,
+so changing `SESSION_DOMAIN` cannot desync a running container from the URL
+prefix it was started with. Existing sessions pick up the new mode the next time
+they are resumed.
+
+Separate hostnames also mean the browser treats sessions as separate origins, so
+cookies and storage are isolated between them rather than merely path-scoped.
+
 ## Letting players start their own
 
 Set `INVITE_PASSWORD` and you stop being the bottleneck. It is a second, shared
@@ -245,6 +281,7 @@ link they can actually use.
 | `PUBLIC_URL` | empty | Base URL shown to players |
 | `MANAGER_ENABLE_HTTPS` | `true` | Serve HTTPS on a self-signed certificate; `false` only behind a TLS proxy |
 | `MANAGER_CERT_HOSTS` | empty | Extra names/IPs to put in that certificate |
+| `SESSION_DOMAIN` | empty | Wildcard domain giving each session its own hostname; empty keeps `/s/<id>/` |
 | `ALLOWED_ORIGINS` | empty | Extra permitted browser origins; `*` disables the check |
 | `MAX_SESSIONS` | `6` | Refuse to create more live sessions than this |
 | `IDLE_MINUTES` | `30` | Stop a session after this long with nobody watching |

@@ -52,11 +52,25 @@ def _ago(seconds: int) -> str:
     return f"{seconds // 3600}h"
 
 
+def session_url(s, cfg) -> str:
+    """Where a player points their browser.
+
+    With a wildcard domain each session has a hostname of its own, which is an
+    absolute URL and cannot be a relative link -- it is a different origin.
+    Without one, sessions share the manager's hostname under /s/<id>/.
+    """
+    domain = cfg.get("session_domain", "")
+    base = cfg.get("public_url", "")
+    if domain:
+        scheme = "http" if base.startswith("http://") else "https"
+        return f"{scheme}://{s.id}.{domain}/"
+    return f"{base}{s.path}/" if base else f"{s.path}/"
+
+
 def _session_card(s, cfg, is_new: bool) -> str:
     e = html.escape
     idle = int(time.time() - s.last_seen)
-    base = cfg["public_url"]
-    url = f"{base}{s.path}/" if base else f"{s.path}/"
+    url = session_url(s, cfg)
 
     if s.active_conns:
         meta = f"{s.active_conns} viewer{'s' if s.active_conns != 1 else ''} connected"
@@ -65,7 +79,7 @@ def _session_card(s, cfg, is_new: bool) -> str:
     else:
         meta = f"idle {_ago(idle)}"
 
-    actions = [f'<a class="btn" href="{e(s.path)}/" target="_blank">Open</a>']
+    actions = [f'<a class="btn" href="{e(url)}" target="_blank">Open</a>']
     if s.status == "stopped":
         actions.append(f'<form class="inline" method="post" action="/api/sessions/{e(s.id)}/resume">'
                        f'<button>Resume</button></form>')

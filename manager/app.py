@@ -68,6 +68,11 @@ def load_config() -> dict:
         "invite_password": os.environ.get("INVITE_PASSWORD", ""),
         "max_sessions_per_guest": int(os.environ.get("MAX_SESSIONS_PER_GUEST", "2")),
         "public_url": os.environ.get("PUBLIC_URL", "").rstrip("/"),
+        # Wildcard domain giving every session its own hostname,
+        # e.g. "chaos.kalde.in" -> <id>.chaos.kalde.in. Requires a wildcard DNS
+        # record and a wildcard certificate on whatever terminates TLS. Empty
+        # keeps every session on the manager's own hostname under /s/<id>/.
+        "session_domain": os.environ.get("SESSION_DOMAIN", "").strip().lstrip(".").lower(),
         # HTTPS on by default: the streaming client needs a browser secure
         # context, and plain HTTP is only one on localhost. Turn it off when a
         # reverse proxy terminates TLS in front of the manager.
@@ -134,6 +139,40 @@ def _identify(request: web.Request) -> tuple[str, str] | None:
     if cfg["invite_password"] and _s.compare_digest(password, cfg["invite_password"]):
         return ("claiming", name)
     return None
+
+
+def session_id_from_host(request: web.Request) -> str:
+    """The session a request's Host names, or "" when it names the manager.
+
+    With SESSION_DOMAIN=chaos.kalde.in, "ab12cd.chaos.kalde.in" is session
+    ab12cd and "chaos.kalde.in" is the manager itself. Only one label is
+    accepted before the domain, so a deeper name cannot smuggle a session id.
+    """
+    domain = request.app["cfg"]["session_domain"]
+    if not domain:
+        return ""
+    host = (request.headers.get("X-Forwarded-Host")
+            or request.headers.get("Host") or "")
+    host = host.split(",")[0].strip().split(":")[0].lower()
+    suffix = "." + domain
+    if not host.endswith(suffix):
+        return ""
+    label = host[: -len(suffix)]
+    return label if label and "." not in label else ""
+
+
+@web.middleware
+async def host_routing_middleware(request: web.Request, handler):
+    """Serve a session directly when its own hostname was used.
+
+    Ahead of the auth middleware, because a session authenticates with its own
+    password rather than the manager's login -- the same reason /s/ is exempt
+    there.
+    """
+    sid = session_id_from_host(request)
+    if sid:
+        return await handle_session(request, sid)
+    return await handler(request)
 
 
 @web.middleware
@@ -274,10 +313,14 @@ async def healthz(request: web.Request) -> web.Response:
 # --- session proxy -----------------------------------------------------------
 
 async def session_proxy(request: web.Request) -> web.StreamResponse:
+    """Path-routed entry point: /s/<id>/..."""
+    return await handle_session(request, request.match_info["sid"])
+
+
+async def handle_session(request: web.Request, sid: str) -> web.StreamResponse:
     mgr: SessionManager = request.app["mgr"]
     cfg = request.app["cfg"]
     secret: bytes = request.app["cookie_secret"]
-    sid = request.match_info["sid"]
     session = mgr.sessions.get(sid)
     if session is None:
         raise web.HTTPNotFound(text="No such session. It may have been removed.")
@@ -315,6 +358,9 @@ async def session_proxy(request: web.Request) -> web.StreamResponse:
                                 content_type="text/html", status=503)
         raise web.HTTPServiceUnavailable(text="The session is still starting.")
 
+    # A host-routed session is served at the container's root, so the request
+    # path passes through unchanged; a path-routed one already carries the
+    # /s/<id> prefix the container was told to expect.
     target = f"http://{session.container_name}:8080{request.rel_url}"
     client: aiohttp.ClientSession = request.app["client"]
     mgr.touch(session)
@@ -342,7 +388,8 @@ async def session_proxy(request: web.Request) -> web.StreamResponse:
         cookie = dict(
             name=session_auth.cookie_name(sid),
             value=session_auth.issue(secret, sid),
-            path=f"/s/{sid}/", httponly=True, samesite="Lax",
+            path="/" if session.subfolder == "" else f"/s/{sid}/",
+            httponly=True, samesite="Lax",
             max_age=session_auth.COOKIE_TTL,
             # Follow the real scheme: the proxy's header when there is one,
             # otherwise whether this connection is itself TLS. Marking a cookie
@@ -368,6 +415,8 @@ async def on_startup(app: web.Application) -> None:
     cfg = app["cfg"]
     retention = (f"{cfg['retention_hours']}h" if cfg["retention_hours"]
                  else "saves kept indefinitely")
+    log.info("session routing: %s", f"<id>.{cfg['session_domain']}"
+             if cfg["session_domain"] else "path, /s/<id>/")
     log.info("session manager ready: image=%s network=%s idle=%dm retention=%s max=%d",
              cfg["image"], cfg["network"], cfg["idle_minutes"],
              retention, cfg["max_sessions"])
@@ -385,7 +434,9 @@ async def on_cleanup(app: web.Application) -> None:
 
 
 def build_app() -> web.Application:
-    app = web.Application(middlewares=[auth_middleware], client_max_size=1024 ** 3)
+    app = web.Application(
+        middlewares=[host_routing_middleware, auth_middleware],
+        client_max_size=1024 ** 3)
     app["cfg"] = load_config()
     app.router.add_get("/", index)
     app.router.add_get("/healthz", healthz)

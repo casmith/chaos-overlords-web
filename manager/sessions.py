@@ -61,6 +61,12 @@ class Session:
     # Who may see and manage this session on the landing page. Empty means the
     # admin created it; otherwise the name a guest signed in with.
     owner: str = ""
+    # URL prefix the container serves under. Empty when the session has a
+    # hostname of its own and is served at the root; "/s/<id>" when several
+    # sessions share one hostname and are told apart by path. Recorded per
+    # session because it is baked into the container's environment, so a
+    # running container must keep the value it was started with.
+    subfolder: str = ""
 
     @property
     def container_name(self) -> str:
@@ -73,6 +79,9 @@ class Session:
     @property
     def path(self) -> str:
         return f"/s/{self.id}"
+
+    def hostname(self, domain: str) -> str:
+        return f"{self.id}.{domain}"
 
     def public(self) -> dict:
         d = asdict(self)
@@ -146,8 +155,13 @@ class SessionManager:
     def _create_container(self, session: Session):
         cfg = self.cfg
         self._ensure_volume(session)
+        # A session gets its own hostname when a wildcard domain is configured,
+        # and shares the manager's hostname otherwise. Fixed here rather than
+        # read live, so a config change cannot desync a running container from
+        # the prefix it was started with.
+        session.subfolder = "" if cfg["session_domain"] else session.path
         env = {
-            "WEB_SUBFOLDER": session.path,
+            "WEB_SUBFOLDER": session.subfolder,
             "WEB_PASSWORD": session.password,
             "WEB_USER": cfg["web_user"],
             # TLS terminates at the operator's proxy in front of the manager;
