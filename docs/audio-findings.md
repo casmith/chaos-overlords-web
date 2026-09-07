@@ -143,6 +143,39 @@ The GOG executable is a different binary from the retail one, but the dialog
 patch applies identically (the same three templates at the same offsets), and it
 needs no serial number in the registry.
 
+### In-game music needs one nudge per game
+
+**Music does not start on its own when you begin a game.** It plays over the
+intro and on the title screen, then stops when a game starts and is not
+restarted. Selecting any value under **Options -> Music** starts it, after which
+it keeps playing.
+
+Measured, on a session driven into an actual game:
+
+| moment | audio |
+|---|---|
+| intro cinematic | continuous |
+| title screen, intro finished | 12/12 s, peak 15760 |
+| in game, untouched | **0/12 s, peak 0** |
+| in game, after Options -> Music -> 5 | 10/10 s, peak 15815 |
+| 20 s later, untouched again | 10/10 s |
+
+It is not a volume problem: the setting was already on 5 of 10 and not muted
+while it was silent, and re-selecting that same 5 started it. Something about
+the transition into a game leaves the track stopped, and any menu selection
+re-issues the play.
+
+This was originally written up as "music works", on the strength of captures
+that turned out to be the intro cinematic's own soundtrack playing over a
+screenshot nobody looked at closely. The intro runs about 90 seconds, which is
+long enough to fool a 12-second capture taken shortly after launch. The lesson
+is the same one as `localhost`: check what is actually on screen before
+believing what the meter says.
+
+Whether the same happens under Windows is untested. The shim is native code
+loaded by Wine, so `WINEDEBUG=+mci` cannot see the calls it handles, and there
+is no obvious way to make the game re-issue the play from outside.
+
 Its bundled `wsock32.dll`, `mswsock.dll`, `dpwsockx.dll` and `ipxwrapper.dll`
 are **not** loaded — Wine uses its builtin winsock — so multiplayer behaves
 exactly as measured in [multiplayer-findings.md](multiplayer-findings.md).
@@ -182,3 +215,4 @@ it ships the same tracks as Ogg files and a shim to play them.
 | Scratchy | 8-bit 22 kHz source, plus a double resample at the lowest quality | source is inherent; the double resample is fixed, effect unconfirmed |
 | In-game volume does nothing | Game uses the aux API; Wine registers no aux device | cannot be fixed in the container — use the browser's volume |
 | No music | Red Book CD audio via MCI, no disc present | **solved by using the GOG copy**, which ships the tracks as Ogg plus a winmm shim; a retail rip still needs the disc |
+| No music *in game* | The track is not restarted when a game begins | pick any level under Options -> Music, once per game; it then keeps playing |
