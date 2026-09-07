@@ -1,0 +1,72 @@
+# Chaos Overlords -- on-demand sessions.
+#
+# One container per player, created when someone asks for it, each with its own
+# random password, torn down when nobody is watching. Sessions publish no ports:
+# the manager is the only route in, which is what makes the password meaningful.
+#
+#   cp .env.example .env         # set GAME_PATH_ABS and ADMIN_PASSWORD
+#   docker compose -f docker-compose.yml build          # build the game image
+#   docker compose -f docker-compose.manager.yml up -d
+#
+# Then put your own reverse proxy in front of port 8000 and terminate TLS there.
+# Nothing else needs to be published.
+
+services:
+
+  manager:
+    build: ./manager
+    image: chaos-overlords-manager:latest
+    container_name: chaos-manager
+    restart: unless-stopped
+    environment:
+      # The game image the manager starts for each session.
+      SESSION_IMAGE: ${SESSION_IMAGE:-chaos-overlords:latest}
+      SESSION_NETWORK: ${SESSION_NETWORK:-chaos-net}
+
+      # An ABSOLUTE host path to the game files. The manager asks the Docker
+      # daemon to bind-mount this into each session, and the daemon resolves it
+      # on the host, not inside this container -- so a relative path will not do.
+      GAME_PATH_HOST: ${GAME_PATH_ABS:?set GAME_PATH_ABS to the absolute path of your game directory}
+
+      # Login for this page. Leave unset only on a trusted network: without it,
+      # anyone who can reach the manager can create and delete sessions.
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
+      # Shown to players as the base of their link. Set it to whatever hostname
+      # your reverse proxy serves, e.g. https://chaos.example.com
+      PUBLIC_URL: ${PUBLIC_URL:-}
+
+      # Lifecycle.
+      MAX_SESSIONS: ${MAX_SESSIONS:-6}
+      IDLE_MINUTES: ${IDLE_MINUTES:-30}
+      RETENTION_HOURS: ${RETENTION_HOURS:-72}
+
+      # Per-session resource caps, and anything else to pass through to the
+      # game containers, e.g. SESSION_ENV=VIDEO_FPS=30,WINE_WINDOWS_VERSION=win98
+      SESSION_MEM_LIMIT: ${SESSION_MEM_LIMIT:-1g}
+      SESSION_CPU_LIMIT: ${SESSION_CPU_LIMIT:-2}
+      SESSION_ENV: ${SESSION_ENV:-}
+
+      WEB_USER: ${WEB_USER:-player}
+      TZ: ${TZ:-America/Chicago}
+    volumes:
+      # The Docker API, so the manager can create and remove session containers.
+      # This is a privileged grant: it is effectively root on the host. It is
+      # given to the manager alone -- the session containers, which run the
+      # untrusted legacy software, never get it (SPEC section 31). Harden it
+      # with a socket proxy if that trade is not acceptable; see
+      # docs/sessions.md.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - manager-data:/data
+    ports:
+      - "${MANAGER_PORT:-8000}:8000"
+    networks:
+      - chaos-net
+
+networks:
+  chaos-net:
+    name: ${SESSION_NETWORK:-chaos-net}
+
+volumes:
+  manager-data:

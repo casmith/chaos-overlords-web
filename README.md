@@ -18,6 +18,7 @@ your own copy.
 | 4 | Two-instance TCP/IP multiplayer | connect verified; full game untested |
 | 5 | Network discovery testing | **done** — TCP 4269, bridge networking is enough |
 | 6 | Productionisation | partly in place |
+| — | On-demand sessions (stretch) | **implemented** |
 
 You open a URL and play the game. Nothing to install: no Wine, no VNC client,
 no browser extension. Video, mouse and keyboard are verified working in both
@@ -32,6 +33,17 @@ What testing established is in
 [docs/phase-2-findings.md](docs/phase-2-findings.md).
 
 ---
+
+## Two ways to run it
+
+**Fixed players** — `docker-compose.yml` starts two containers on ports 8081 and
+8082. Simple, and what the quick start below covers.
+
+**On-demand sessions** — `docker-compose.manager.yml` starts a small manager
+that creates a container per player when asked, gives each its own random
+password, proxies browsers to it, and shuts it down when nobody is watching.
+One port for your reverse proxy to sit in front of; sessions publish none at
+all. See [docs/sessions.md](docs/sessions.md).
 
 ## Quick start
 
@@ -311,6 +323,7 @@ attack surface in front of emulated 1990s software.
 
 ## Documentation
 
+- [Sessions](docs/sessions.md) — on-demand containers, per-player passwords, idle teardown
 - [Game files](docs/game-files.md) — what to supply and where to put it
 - [Phase 1 findings](docs/phase-1-findings.md) — Wine, and why the display is 640×480
 - [Phase 2 findings](docs/phase-2-findings.md) — Selkies packaging, and what was verified
