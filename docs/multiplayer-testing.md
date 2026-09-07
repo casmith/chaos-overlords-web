@@ -4,6 +4,9 @@
 Findings section as you go, and copy the conclusions into
 [networking.md](networking.md).
 
+Nothing here is blocked any more: both players are playable in a browser as of
+Phase 2, so this only needs someone to sit down and drive two sessions.
+
 Do not guess the game's ports. Observe them.
 
 ## Setup
@@ -13,8 +16,8 @@ docker compose up -d chaos1 chaos2
 docker compose ps
 ```
 
-Connect a viewer to each container (Phase 1: VNC on 5901 / 5902; Phase 2
-onwards: the browser URL).
+Open each player's session in a browser: http://docker-host:8081 and
+http://docker-host:8082.
 
 ## Step 1 — baseline
 

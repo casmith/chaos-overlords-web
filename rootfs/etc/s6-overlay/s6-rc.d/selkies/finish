@@ -1,0 +1,3 @@
+#!/bin/sh
+# Throttle restarts so a permanently broken service does not spin the logs.
+exec sleep 1

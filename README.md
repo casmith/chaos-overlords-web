@@ -13,21 +13,23 @@ your own copy.
 | Phase | Goal | State |
 |---|---|---|
 | 1 | Game runs under Wine in Docker | **implemented and verified** |
-| 2 | Browser video, mouse, keyboard (Selkies) | not started |
-| 3 | Game audio in the browser | not started |
+| 2 | Browser video, mouse, keyboard (Selkies) | **implemented and verified** |
+| 3 | Game audio in the browser | wired, not verified |
 | 4 | Two-instance TCP/IP multiplayer | not started |
 | 5 | Network discovery testing | not started |
 | 6 | Productionisation | partly in place |
 
-Phase 1 gets the game running under Wine on a virtual X display, supervised by
-s6-overlay, with a persistent per-player Wine prefix. Verified end to end: the
-game launches, menus respond to the mouse, a new game starts, and the city map
-and HUD render correctly. What testing established — including why the display
-defaults to 640×480 — is in
-[docs/phase-1-findings.md](docs/phase-1-findings.md).
+You open a URL and play the game. Nothing to install: no Wine, no VNC client,
+no browser extension. Video, mouse and keyboard are verified working in both
+Firefox and Chrome, and a full game has been started end to end through the
+browser input path.
 
-Until Phase 2 lands, the display is exposed over **raw VNC** for verification —
-that is a development aid, not the product, and it carries no audio.
+Audio rides the same connection and is configured, but nobody has confirmed
+hearing it yet — that is Phase 3. Multiplayer between containers is Phase 4.
+
+What testing established is in
+[docs/phase-1-findings.md](docs/phase-1-findings.md) and
+[docs/phase-2-findings.md](docs/phase-2-findings.md).
 
 ---
 
@@ -59,10 +61,18 @@ Watch it come up:
 docker logs -f chaos1
 ```
 
-Then connect a VNC viewer to `docker-host:5901` (player 1) or `:5902`
-(player 2). No password — keep these ports on a trusted network.
+Then open a browser:
 
-Or, with no viewer at all:
+```
+http://docker-host:8081     player 1
+http://docker-host:8082     player 2
+```
+
+That is the whole client. There is **no login by default** — set `WEB_PASSWORD`
+in `.env` to turn on basic authentication, and keep these ports on a trusted
+network or behind a VPN or reverse proxy either way.
+
+To see the screen without a browser:
 
 ```bash
 docker exec chaos1 chaos-screenshot
@@ -92,17 +102,21 @@ GAME_EXE=/game/Chaos Overlords.exe
 ## How it works
 
 ```
-Browser / VNC viewer
-        │
+Browser
+        │  HTTP + WebSocket, one TCP port (8080)
         ▼
-   x11vnc  (Phase 2: Selkies + WebRTC)
-        │
+   Selkies ── pixelflux: reads the display, encodes H.264 on the CPU
+        │  ── pcmflux:   reads the null sink monitor, encodes Opus
+        │  ── XTEST:     injects mouse and keyboard back into X
+        ▼
    Xvfb :0  640x480x24  ──  Openbox (no decorations, black root)
         │
    Wine (win32 prefix, virtual desktop)
         │
    Chaos Overlords            PulseAudio null sink
 ```
+
+Wine sees ordinary X input events; it cannot tell a browser from a local mouse.
 
 Everything is supervised by s6-overlay. Wine runs as the unprivileged `chaos`
 user; only the supervisor is root, and only so it can fix volume ownership.
@@ -148,7 +162,7 @@ volume and host port:
       - ${GAME_PATH:-./chaos}:/game:ro
       - chaos3-config:/config
     ports:
-      - "5903:5900"
+      - "8083:8080"
     networks:
       - chaos-net
 ```
@@ -176,12 +190,21 @@ All of these are set in `.env` or per-service in `docker-compose.yml`.
 | `WINE_WINDOWS_VERSION` | `win98` | `win95`, `win98`, `win2k`, `winxp` |
 | `WINE_VIRTUAL_DESKTOP` | `true` | Contain the game in a Wine desktop window |
 | `ENABLE_AUDIO` | `true` | Run PulseAudio with a null sink |
-| `ENABLE_VNC` | `true` | Phase 1 diagnostic view |
+| `ENABLE_SELKIES` | `true` | Browser streaming |
+| `WEB_PORT` | `8080` | In-container streaming port |
+| `WEB_USER` | `player` | Basic-auth username |
+| `WEB_PASSWORD` | empty | Set to enable basic auth; empty means no login |
+| `ENABLE_HTTPS` | `false` | Serve HTTPS on a self-signed cert instead of plain HTTP |
+| `WEB_SUBFOLDER` | empty | URL prefix when proxied under a subpath |
+| `VIDEO_ENCODER` | `h264enc` | `h264enc`, `h264enc-striped` or `jpeg` |
+| `VIDEO_FPS` | `30` | Frame rate; 15 for a low-bandwidth link |
+| `VIDEO_BITRATE` | `2000` | kbps |
+| `AUDIO_BITRATE` | `96000` | Opus, bits per second |
+| `ENABLE_VNC` | `false` | Raw VNC on 5900, for debugging the X session |
 | `VNC_PORT` | `5900` | In-container VNC port |
 | `TZ` | `America/Chicago` | Container timezone |
 | `DEBUG` | `false` | Verbose Wine/X/audio logging |
 | `PUID` / `PGID` | `1000` | Runtime uid/gid, for bind-mounted `/config` |
-| `WEB_PORT` | — | Reserved for Phase 2 |
 
 The display defaults to 640×480 because that is the game's fixed resolution and
 Wine's virtual desktop resizes to match — a larger screen just adds black
@@ -257,16 +280,22 @@ The container runs obsolete Windows software; treat it as untrusted.
   access
 - `no-new-privileges:true` is set in the shipped compose file
 
-The streaming/VNC port is unauthenticated. Keep it on a trusted network, or put
-it behind a VPN or an authenticating reverse proxy — see
+The streaming port is unauthenticated unless `WEB_PASSWORD` is set, and basic
+auth over plain HTTP sends the password in the clear. Keep it on a trusted
+network, or put it behind a VPN or an authenticating reverse proxy — see
 [docs/networking.md](docs/networking.md).
+
+Gamepad, webcam, microphone, file transfer and remote command execution are all
+turned off in the streaming service: out of scope for this project, and less
+attack surface in front of emulated 1990s software.
 
 ---
 
 ## Documentation
 
 - [Game files](docs/game-files.md) — what to supply and where to put it
-- [Phase 1 findings](docs/phase-1-findings.md) — what testing actually established
+- [Phase 1 findings](docs/phase-1-findings.md) — Wine, and why the display is 640×480
+- [Phase 2 findings](docs/phase-2-findings.md) — Selkies packaging, and what was verified
 - [Architecture](docs/architecture.md) — process tree, startup, filesystem layout
 - [Networking](docs/networking.md) — the two network paths, ports, macvlan
 - [Multiplayer testing](docs/multiplayer-testing.md) — how the ports get discovered

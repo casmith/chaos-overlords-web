@@ -2,13 +2,14 @@
 
 ## Current status
 
-**Phase 1 (Wine proof of concept) — implemented and verified.**
-Chaos Overlords runs, renders and plays under Wine on a virtual X display
-inside the container. What testing established is recorded in
-[phase-1-findings.md](phase-1-findings.md).
-Browser streaming (Phase 2), browser audio (Phase 3) and multiplayer testing
-(Phases 4–5) are not implemented yet. Raw VNC is exposed as a temporary
-verification path only.
+**Phases 1 and 2 implemented and verified.** Chaos Overlords runs under Wine on
+a virtual X display, and the session is played from a browser over a single
+WebSocket port: video, mouse and keyboard all confirmed in Firefox and Chrome.
+
+Browser audio (Phase 3) is wired but unverified, and multiplayer testing
+(Phases 4–5) has not started. What testing established is recorded in
+[phase-1-findings.md](phase-1-findings.md) and
+[phase-2-findings.md](phase-2-findings.md).
 
 ## Process tree
 
@@ -21,7 +22,8 @@ verification path only.
  ├── init-wine     [oneshot]  create/refresh the Wine prefix  (user: chaos)
  ├── openbox       [longrun]  window manager, no decorations  (user: chaos)
  ├── pulseaudio    [longrun]  null sink "chaos-out"           (user: chaos)
- ├── x11vnc        [longrun]  Phase 1 diagnostic view         (user: chaos)
+ ├── selkies       [longrun]  browser streaming on :8080      (user: chaos)
+ ├── x11vnc        [longrun]  raw VNC, off unless debugging   (user: chaos)
  └── game          [longrun]  wine explorer /desktop=... CHAOS (user: chaos)
 ```
 
@@ -51,9 +53,13 @@ Matching SPEC section 13:
    registry settings and the game file links (both cheap and idempotent).
 4. `openbox` takes over window management and paints the root black.
 5. `pulseaudio` starts with a null sink.
-6. `x11vnc` exposes the display (Phase 1 only).
+6. `selkies` starts browser streaming, and `x11vnc` exposes raw VNC if it was
+   turned on for debugging.
 7. `game` launches Chaos Overlords inside a Wine virtual desktop and supervises
    it, restarting with capped backoff.
+
+`selkies` deliberately does not depend on `game`: if the game fails to start,
+the browser still shows the desktop and whatever Wine error dialog is on it.
 
 Failure in either oneshot aborts the container
 (`S6_BEHAVIOUR_IF_STAGE2_FAILS=2`), so a missing game file produces an
@@ -125,6 +131,32 @@ to do so, letting Wine flush its registry and saves, before falling back to
 `wineserver -k`. Measured: no Wine process survives that, and a full
 `docker stop` takes about 6 seconds and exits 0. The compose file sets
 `stop_grace_period: 30s` because Docker's 10 s default would cut a save short.
+
+## Browser streaming
+
+Selkies serves the web client and streams the display over **one TCP port**
+(`WEB_PORT`, default 8080). Video, audio, mouse and keyboard all ride that
+single WebSocket connection, so there is no signalling server, no separate media
+port, and no STUN/TURN to arrange. WebRTC exists as an opt-in transport in
+Selkies but is not used here — the WebSocket path is simpler to proxy and more
+than fast enough for a turn-based game (SPEC section 37 allows 150 ms).
+
+```
+Browser  ──HTTP + WebSocket──►  selkies (:8080)
+                                   │
+                    pixelflux ─────┤  reads Xvfb :0, encodes H.264 (x264, CPU)
+                    pcmflux   ─────┤  reads chaos-out.monitor, encodes Opus
+                    python-xlib ───┘  injects input via XTEST
+```
+
+Selkies is copied out of the project's own Debian 13 image in a multi-stage
+build, pinned by digest. The reasoning, and how to update it, is in
+[phase-2-findings.md](phase-2-findings.md).
+
+Input arrives as short comma-delimited messages — `m,<x>,<y>,<buttons>,<scroll>`
+for the pointer, `kd,<keysym>` / `ku,<keysym>` for keys — which Selkies replays
+onto the X display through XTEST. Wine sees ordinary X input events and cannot
+tell the difference between a browser and a local mouse.
 
 ## Deliberate omissions
 

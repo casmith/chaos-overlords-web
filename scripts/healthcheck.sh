@@ -34,13 +34,22 @@ if [ "${ENABLE_AUDIO}" = "true" ]; then
     ok+=("audio")
 fi
 
-# 6. The streaming/remote-view endpoint, when enabled.
-#    Phase 1 exposes raw VNC; Phase 2 replaces this with the Selkies web port.
+# 6. The streaming endpoint: the browser has to be able to reach the game.
+listening() {
+    command -v ss >/dev/null 2>&1 || return 0
+    ss -lnt 2>/dev/null | grep -q ":${1}\b"
+}
+
+if [ "${ENABLE_SELKIES}" = "true" ]; then
+    listening "${WEB_PORT}" || fail "streaming port ${WEB_PORT} is not listening"
+    pgrep -f 'selkies' >/dev/null 2>&1 || fail "selkies is not running"
+    ok+=("stream")
+fi
+
+# 7. Raw VNC, when the operator turned it on for debugging.
 if [ "${ENABLE_VNC}" = "true" ]; then
-    if command -v ss >/dev/null 2>&1; then
-        ss -lnt 2>/dev/null | grep -q ":${VNC_PORT}\b" || fail "VNC port ${VNC_PORT} is not listening"
-        ok+=("vnc")
-    fi
+    listening "${VNC_PORT}" || fail "VNC port ${VNC_PORT} is not listening"
+    ok+=("vnc")
 fi
 
 # Informational only.

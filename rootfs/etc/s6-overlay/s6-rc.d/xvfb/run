@@ -8,5 +8,6 @@ args=(
     -noreset
     -ac
 )
-[ "${DEBUG}" = "true" ] || args+=(-nocursor)
+# No -nocursor: Selkies reads the cursor through XFixes and draws it in the
+# browser, so hiding it here would leave the client with no pointer.
 chaos_as_user Xvfb "${args[@]}"

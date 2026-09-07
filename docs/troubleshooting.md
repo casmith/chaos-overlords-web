@@ -16,7 +16,7 @@ Every stage prints a `[tag]` prefix, so a healthy startup reads as a timeline:
 [audio]   Starting D-Bus session bus
 [audio]   Starting D-Bus system bus
 [audio]   Starting PulseAudio with null sink 'chaos-out'
-[stream]  Starting x11vnc on port 5900
+[stream]  Starting Selkies on http://0.0.0.0:8080 (h264enc, 30 fps)
 [display] Starting Openbox
 [wine]    Creating win32 Wine prefix at /config/wine (first run, this takes a moment)
 [wine]    Linking game files into C:\games\Chaos
@@ -161,10 +161,71 @@ The game is a fixed-resolution DirectDraw-era title.
   preferences include a `prefsVidDeep` flag suggesting it cares about colour
   depth.
 
-## No audio
+## The browser page does not load
 
-Phase 1 has no browser audio path at all — raw VNC carries video only. What can
-be verified now is that the game produces audio inside the container:
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:8081/   # expect 200
+docker exec chaos1 ss -lnt | grep 8080                              # expect LISTEN
+docker exec chaos1 pgrep -af 'bin/selkies'
+```
+
+- **401 instead of 200** — basic authentication is on. That happens whenever
+  `WEB_PASSWORD` is set; log in as `WEB_USER` (default `player`).
+- **Connection refused** — check the host port mapping in `docker-compose.yml`.
+  The container always listens on 8080; compose maps it to 8081, 8082 and so on
+  per player.
+- **`ENABLE_SELKIES=false`** — the log says `Browser streaming disabled`.
+
+## The page loads but the screen is black
+
+The client connected but no frames are arriving, or the display itself is
+blank. Separate the two:
+
+```bash
+docker exec chaos1 chaos-screenshot
+docker cp chaos1:/config/logs/screen.png .
+```
+
+If that screenshot shows the game, the display is fine and the problem is the
+stream or the browser. If it is black, this is a display problem — see
+[Black screen, no game](#black-screen-no-game).
+
+For a stream problem, check the browser console for WebSocket or decoder errors,
+then restart with `DEBUG=true` for Selkies' own logging. Chrome and Firefox both
+decode this stream; a very old browser without WebCodecs will not.
+
+## Mouse or keyboard does not reach the game
+
+Input is injected onto the X display through XTEST, so it can be tested from
+outside the browser entirely:
+
+```bash
+docker exec -e DISPLAY=:0 chaos1 xdotool mousemove 12 10 click 1
+docker exec chaos1 chaos-screenshot && docker cp chaos1:/config/logs/screen.png .
+```
+
+If that moves the game's menu highlight, X input works and the problem is
+between browser and Selkies. If it does not, the game is not accepting input —
+check that a Wine dialog has not taken focus.
+
+Note that a viewer connected with a view-only password cannot send input by
+design.
+
+## No pointer visible in the browser
+
+Selkies reads the remote cursor through XFixes. If Xvfb is started with
+`-nocursor` there is nothing to read and the browser shows no pointer. This
+image deliberately does not pass that flag; if you have overridden the Xvfb
+arguments, that is the cause.
+
+## Audio
+
+Audio is Phase 3 and is **not verified end to end**. The pipeline is wired —
+Selkies captures the null sink's monitor and encodes Opus on the same connection
+as the video — but no audio has been confirmed arriving at a browser. See
+[phase-2-findings.md](phase-2-findings.md).
+
+What can be checked today, inside the container:
 
 ```bash
 docker exec chaos1 pactl info
@@ -176,6 +237,16 @@ docker exec chaos1 wine reg query 'HKCU\Software\Wine\Drivers' /v Audio
 `Audio` should read `pulse`. If there are no sink inputs while the game plays a
 sound, Wine is not reaching PulseAudio; check `PULSE_SERVER` and that
 `/run/pulse/native` exists.
+
+On the Selkies side, a working capture logs:
+
+```
+[pcmflux] Capture loop started. Device: chaos-out.monitor, Rate: 48000, Channels: 2
+INFO:data_websocket:pcmflux audio capture state: running.
+```
+
+If the device name is wrong there, `PULSE_SINK_NAME` and the sink created by
+`config/pulseaudio/default.pa` have drifted apart.
 
 ## Slow or stuttering
 

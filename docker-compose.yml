@@ -4,10 +4,11 @@
 #   docker compose build
 #   docker compose up -d
 #
-# Phase 1 status: the game runs under Wine on a virtual X display. Verify with a
-# VNC viewer against the ports below, or with:
-#   docker exec chaos1 chaos-screenshot
-# Browser streaming (Selkies) arrives in Phase 2.
+# Then open http://<docker-host>:8081 for player 1 and :8082 for player 2.
+# Video, audio, mouse and keyboard all ride that single port.
+#
+# The streaming port is unauthenticated unless WEB_PASSWORD is set. Keep it on a
+# trusted network, or put a VPN or authenticating reverse proxy in front.
 
 services:
 
@@ -29,7 +30,14 @@ services:
       WINE_WINDOWS_VERSION: ${WINE_WINDOWS_VERSION:-win98}
       WINE_VIRTUAL_DESKTOP: ${WINE_VIRTUAL_DESKTOP:-true}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      ENABLE_VNC: ${ENABLE_VNC:-true}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
+      VIDEO_FPS: ${VIDEO_FPS:-30}
+      VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
+      AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
+      ENABLE_HTTPS: ${ENABLE_HTTPS:-false}
+      WEB_USER: ${WEB_USER:-player}
+      WEB_PASSWORD: ${WEB_PASSWORD:-}
+      ENABLE_VNC: ${ENABLE_VNC:-false}
       TZ: ${TZ:-America/Chicago}
       DEBUG: ${DEBUG:-false}
     volumes:
@@ -38,7 +46,7 @@ services:
       # Per-player Wine prefix, saves and state.
       - chaos1-config:/config
     ports:
-      - "${CHAOS1_VNC_PORT:-5901}:5900"
+      - "${CHAOS1_WEB_PORT:-8081}:8080"
     networks:
       - chaos-net
     security_opt:
@@ -62,14 +70,21 @@ services:
       WINE_WINDOWS_VERSION: ${WINE_WINDOWS_VERSION:-win98}
       WINE_VIRTUAL_DESKTOP: ${WINE_VIRTUAL_DESKTOP:-true}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      ENABLE_VNC: ${ENABLE_VNC:-true}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
+      VIDEO_FPS: ${VIDEO_FPS:-30}
+      VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
+      AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
+      ENABLE_HTTPS: ${ENABLE_HTTPS:-false}
+      WEB_USER: ${WEB_USER:-player}
+      WEB_PASSWORD: ${WEB_PASSWORD:-}
+      ENABLE_VNC: ${ENABLE_VNC:-false}
       TZ: ${TZ:-America/Chicago}
       DEBUG: ${DEBUG:-false}
     volumes:
       - ${GAME_PATH:-./chaos}:/game:ro
       - chaos2-config:/config
     ports:
-      - "${CHAOS2_VNC_PORT:-5902}:5900"
+      - "${CHAOS2_WEB_PORT:-8082}:8080"
     networks:
       - chaos-net
     security_opt:

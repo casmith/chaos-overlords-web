@@ -8,11 +8,27 @@
 #
 #   docker build -t chaos-overlords .
 #
+# ---------------------------------------------------------------------------
+# Selkies source stage.
+#
+# Selkies is a single Python application; its published packages are built from
+# a branch with no tagged release, so the reliable, reproducible way to get it
+# is to copy the install out of the project's own Debian 13 image, pinned by
+# digest. Same distribution, same Python 3.13, so the native extensions match
+# our runtime ABI exactly.
+#
+# To update: docker pull ghcr.io/selkies-project/selkies/base:main-debiantrixie
+#            docker image inspect --format '{{index .RepoDigests 0}}' <that image>
+# ---------------------------------------------------------------------------
+ARG SELKIES_IMAGE=ghcr.io/selkies-project/selkies/base@sha256:967edbbfce557e5cf0be12d9ef7e54d6fdd2457fcb00b75cc8f4a1595e02f6e3
+FROM ${SELKIES_IMAGE} AS selkies
+
 FROM debian:trixie-slim
 
 ARG S6_OVERLAY_VERSION=3.2.3.2
 ARG APP_UID=1000
 ARG APP_GID=1000
+ARG SELKIES_PYTHON=python3.13
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8
@@ -42,6 +58,40 @@ RUN set -eux; \
         x11vnc \
         pulseaudio \
         pulseaudio-utils \
+    ; \
+    rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# Runtime libraries for Selkies. Its wheels vendor the heavy pieces (ffmpeg,
+# x264, Opus, PulseAudio client), so what is left are the system libraries
+# pixelflux captures and encodes through, plus the Python 3.13 the copied
+# install is built for.
+# ---------------------------------------------------------------------------
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        libgbm1 \
+        libdrm2 \
+        libexpat1 \
+        libpixman-1-0 \
+        libva2 \
+        libva-drm2 \
+        libva-x11-2 \
+        libx11-6 \
+        libx11-xcb1 \
+        libxau6 \
+        libxcb1 \
+        libxcb-dri3-0 \
+        libxdmcp6 \
+        libxext6 \
+        libxfixes3 \
+        libxkbcommon0 \
+        libxtst6 \
+        libice6 \
+        libsm6 \
+        libuuid1 \
+        zlib1g \
     ; \
     rm -rf /var/lib/apt/lists/*
 
@@ -84,6 +134,24 @@ RUN set -eux; \
     chown chaos:chaos /config /run/chaos /run/pulse
 
 # ---------------------------------------------------------------------------
+# Selkies itself: the Python package tree and its launchers.
+# ---------------------------------------------------------------------------
+COPY --from=selkies /usr/local/lib/${SELKIES_PYTHON}/dist-packages /usr/local/lib/${SELKIES_PYTHON}/dist-packages
+COPY --from=selkies /usr/local/bin/selkies /usr/local/bin/selkies-resize /usr/local/bin/selkies-gpu-probe /usr/local/bin/
+
+# Fail the build here rather than at run time if a shared library is missing:
+# an unresolved symbol in pixelflux or pcmflux would otherwise surface as a
+# blank browser tab with a Python traceback buried in the container log.
+RUN set -eux; \
+    for so in /usr/local/lib/${SELKIES_PYTHON}/dist-packages/pixelflux*.so \
+              /usr/local/lib/${SELKIES_PYTHON}/dist-packages/pcmflux*.so; do \
+        echo "checking ${so}"; \
+        ! ldd "${so}" | grep "not found" || { ldd "${so}" | grep "not found"; exit 1; }; \
+    done; \
+    python3 -c "import selkies, pixelflux, pcmflux; print('selkies imports cleanly')"; \
+    selkies --help > /dev/null
+
+# ---------------------------------------------------------------------------
 # Project files.
 # ---------------------------------------------------------------------------
 COPY rootfs/ /
@@ -112,7 +180,15 @@ ENV CONFIG_DIR=/config \
     DISPLAY_HEIGHT=480 \
     DISPLAY_DEPTH=24 \
     ENABLE_AUDIO=true \
-    ENABLE_VNC=true \
+    ENABLE_SELKIES=true \
+    WEB_PORT=8080 \
+    ENABLE_HTTPS=false \
+    WEB_USER=player \
+    VIDEO_ENCODER=h264enc \
+    VIDEO_FPS=30 \
+    VIDEO_BITRATE=2000 \
+    AUDIO_BITRATE=96000 \
+    ENABLE_VNC=false \
     VNC_PORT=5900 \
     PULSE_RUNTIME_PATH=/run/pulse \
     PULSE_SERVER=unix:/run/pulse/native \
@@ -128,8 +204,9 @@ ENV CONFIG_DIR=/config \
 
 VOLUME ["/config"]
 
-# Phase 1 exposes raw VNC for verification only. Phase 2 replaces this with the
-# Selkies web port.
+# The browser streaming port: video, audio, mouse and keyboard all ride this
+# single TCP port. 5900 is raw VNC, off unless ENABLE_VNC=true for debugging.
+EXPOSE 8080
 EXPOSE 5900
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \

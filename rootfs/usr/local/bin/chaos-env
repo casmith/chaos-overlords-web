@@ -29,9 +29,30 @@
 : "${PULSE_RUNTIME_PATH:=/run/pulse}"
 : "${PULSE_SERVER:=unix:${PULSE_RUNTIME_PATH}/native}"
 
-# --- Phase 1 diagnostics -----------------------------------------------------
-# Raw VNC is a development aid only; Phase 2 replaces it with Selkies.
-: "${ENABLE_VNC:=true}"
+# --- Browser streaming (Selkies) ---------------------------------------------
+: "${ENABLE_SELKIES:=true}"
+: "${WEB_PORT:=8080}"
+# TLS normally terminates at a reverse proxy, so the container serves plain
+# HTTP. Set ENABLE_HTTPS=true to have Selkies serve its own self-signed pair.
+: "${ENABLE_HTTPS:=false}"
+# Basic auth is off until a password is set. Selkies itself refuses to start
+# with auth enabled and no password, so this is an explicit either/or.
+: "${WEB_USER:=player}"
+: "${WEB_PASSWORD:=}"
+# URL prefix when reverse-proxied under a subpath (e.g. "/chaos1").
+: "${WEB_SUBFOLDER:=}"
+
+# Video: the game is 2D and mostly static, so 30 fps and a modest bitrate are
+# ample (SPEC sections 35 and 37). h264enc | h264enc-striped | jpeg.
+: "${VIDEO_ENCODER:=h264enc}"
+: "${VIDEO_FPS:=30}"
+: "${VIDEO_BITRATE:=2000}"
+# Opus, in bits per second (SPEC section 36 asks for 64-128 kbps).
+: "${AUDIO_BITRATE:=96000}"
+
+# --- Diagnostics -------------------------------------------------------------
+# Raw VNC, superseded by Selkies. Kept for debugging the X session directly.
+: "${ENABLE_VNC:=false}"
 : "${VNC_PORT:=5900}"
 
 # --- Behaviour ---------------------------------------------------------------
@@ -55,6 +76,8 @@ export CONFIG_DIR GAME_DIR GAME_WIN_DIR GAME_UNIX_DIR
 export WINEPREFIX WINEARCH WINE_WINDOWS_VERSION WINE_VIRTUAL_DESKTOP
 export DISPLAY DISPLAY_WIDTH DISPLAY_HEIGHT DISPLAY_DEPTH
 export ENABLE_AUDIO PULSE_SINK_NAME PULSE_RUNTIME_PATH PULSE_SERVER
+export ENABLE_SELKIES WEB_PORT ENABLE_HTTPS WEB_USER WEB_PASSWORD WEB_SUBFOLDER
+export VIDEO_ENCODER VIDEO_FPS VIDEO_BITRATE AUDIO_BITRATE
 export ENABLE_VNC VNC_PORT
 export DEBUG GAME_RESTART_DELAY GAME_MAX_RESTARTS APP_USER APP_GROUP TZ
 export WINEDEBUG WINEDLLOVERRIDES

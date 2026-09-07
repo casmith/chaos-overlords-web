@@ -1,0 +1,74 @@
+#!/command/with-contenv bash
+# Browser streaming: video, mouse and keyboard over a single WebSocket port.
+. /usr/local/bin/chaos-env
+
+if [ "${ENABLE_SELKIES}" != "true" ]; then
+    chaos_log stream "Browser streaming disabled (ENABLE_SELKIES=${ENABLE_SELKIES})"
+    exec sleep infinity
+fi
+
+chaos-wait-x 30 || exit 1
+
+args=(
+    --addr=0.0.0.0,::
+    --port="${WEB_PORT}"
+    --enable-https="${ENABLE_HTTPS}"
+
+    # The virtual display is sized to the game and cannot be resized at
+    # runtime, so the client must not try to fit it to the browser window.
+    --enable-resize=false
+    --enable-cursors=true
+
+    # No GPU is required or assumed (SPEC section 9); encode on the CPU.
+    --use-cpu=true
+    --encoder="${VIDEO_ENCODER}"
+    --framerate="${VIDEO_FPS}"
+    --video-bitrate="${VIDEO_BITRATE}"
+
+    # Out of scope for this project, and less attack surface for a service
+    # fronting emulated 1990s software (SPEC sections 3 and 31).
+    --command-enabled=false
+    --gamepad-enabled=false
+    --webcam-enabled=false
+    --microphone-enabled=false
+    --file-transfers=
+    --enable-sharing=false
+    --enable-collab=false
+
+    # Show the game, not a remote-desktop console (SPEC section 33).
+    --ui-title="Chaos Overlords"
+    --ui-sidebar-show-files=false
+    --ui-sidebar-show-apps=false
+    --ui-sidebar-show-gamepads=false
+    --ui-sidebar-show-webcam=false
+    --ui-sidebar-show-sharing=false
+    --ui-sidebar-show-screen-settings=false
+)
+
+if [ "${ENABLE_AUDIO}" = "true" ]; then
+    args+=(--audio-enabled=true --audio-device-name="${PULSE_SINK_NAME}.monitor"
+           --audio-bitrate="${AUDIO_BITRATE}")
+else
+    args+=(--audio-enabled=false)
+fi
+
+if [ -n "${WEB_PASSWORD}" ]; then
+    chaos_log stream "Basic authentication enabled for user '${WEB_USER}'"
+    args+=(--enable-basic-auth=true
+           --basic-auth-user="${WEB_USER}"
+           --basic-auth-password="${WEB_PASSWORD}")
+else
+    chaos_log stream "No WEB_PASSWORD set: serving without authentication."
+    chaos_log stream "Keep this port on a trusted network, or put a proxy or VPN in front."
+    args+=(--enable-basic-auth=false)
+fi
+
+[ -n "${WEB_SUBFOLDER}" ] && args+=(--subfolder="${WEB_SUBFOLDER}")
+[ "${DEBUG}" = "true" ] && args+=(--debug=true)
+
+scheme=http; [ "${ENABLE_HTTPS}" = "true" ] && scheme=https
+chaos_log stream "Starting Selkies on ${scheme}://0.0.0.0:${WEB_PORT} (${VIDEO_ENCODER}, ${VIDEO_FPS} fps)"
+
+# Selkies reads the display and the PulseAudio socket from the environment,
+# both of which chaos-env has already exported.
+chaos_as_user selkies "${args[@]}"

@@ -15,16 +15,29 @@ A remote player needs to reach only the **first** path. The game's own
 multiplayer traffic stays on the container network and never has to be exposed
 to the internet. This is the preferred deployment model.
 
-## Phase 1 status
-
-Phase 1 does not implement browser streaming or multiplayer testing. What exists
-today:
+## Current status
 
 | Path | Port | State |
 |---|---|---|
-| Diagnostic view (raw VNC, no audio) | 5900 in-container | implemented, dev only |
-| Browser streaming (Selkies) | TBD | Phase 2 |
+| Browser streaming (Selkies, WebSocket) | 8080 in-container | implemented |
+| Diagnostic view (raw VNC, no audio) | 5900 in-container | off unless `ENABLE_VNC=true` |
 | Chaos Overlords multiplayer | **unknown — do not guess** | Phase 4/5 |
+
+### The streaming port
+
+Selkies uses its **WebSocket transport**, not WebRTC. That means one TCP port
+carries everything — the web client, the H.264 video, the Opus audio and every
+input event. There is no signalling server, no media port range, and no
+STUN/TURN to arrange. Compose maps one host port per player:
+
+```
+http://docker-host:8081   ->  chaos1:8080
+http://docker-host:8082   ->  chaos2:8080
+```
+
+WebRTC is available in Selkies as an opt-in transport but is not used here: it
+would add a UDP port range and TURN traversal for no benefit on a turn-based
+game where 150 ms of input latency is comfortable (SPEC section 37).
 
 ## Container-to-container
 
@@ -96,21 +109,61 @@ Two caveats worth knowing before going down this road:
 ## Reverse proxy
 
 TLS terminates at the proxy; the container never manages certificates
-(SPEC section 21). The streaming service needs WebSocket upgrade support and,
-for WebRTC, either a permissive UDP path or a TURN relay. Concrete
-configurations belong with the Phase 2 streaming implementation, so they are
-deliberately not written here yet — the required headers depend on which
-Selkies transport ends up in use.
+(SPEC section 21) and serves plain HTTP by default. Because the transport is
+plain WebSockets over one port, the proxy requirements are the ordinary ones:
 
-What is already true regardless of proxy:
+- **Forward the WebSocket upgrade.** `Upgrade` and `Connection` headers on
+  `/api/websockets`, or on the whole prefix.
+- **Do not buffer, and do not time the connection out.** A streaming WebSocket
+  is idle-looking to a proxy that watches for request completion. Raise read
+  timeouts well past the default 60 s.
+- **Set `WEB_SUBFOLDER`** if the session is served under a path rather than at
+  the root of a hostname. The web client reads its own prefix from the URL it
+  was loaded from, so only the server needs telling.
 
-- The container listens on plain HTTP/VNC only, on the container network.
-- Nothing in the container assumes a particular external hostname or path.
+Nginx, for one player at a subpath:
+
+```nginx
+location /chaos1/ {
+    proxy_pass http://chaos1:8080/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_buffering off;
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}
+```
+
+with `WEB_SUBFOLDER=/chaos1` in that container's environment.
+
+Caddy needs no WebSocket configuration at all — `reverse_proxy chaos1:8080`
+handles the upgrade — and Traefik needs only a router and service, with the
+same advice about timeouts.
+
+**None of these has been tested against a real deployment yet.** They follow
+from the transport rather than from measurement; treat them as a starting point.
+
+What is true regardless of proxy:
+
+- The container listens on plain HTTP only, on the container network.
+- Nothing in the container assumes a particular external hostname.
+- The streaming port is unauthenticated unless `WEB_PASSWORD` is set.
 
 ## Authentication
 
-The streaming service must not be treated as safe to expose publicly. Put it
-behind one of:
+Selkies has built-in HTTP basic authentication, off by default in this image.
+Set `WEB_PASSWORD` (and optionally `WEB_USER`, default `player`) to turn it on;
+Selkies itself refuses to start with authentication enabled and no password, so
+it is an explicit either/or rather than something that can be half-configured.
+Verified: no credentials and a wrong password both return 401, the right one
+returns 200.
+
+Basic auth over plain HTTP sends the password in the clear, so it is only
+meaningful behind TLS. It is a convenience, not a substitute for the options
+below. The streaming service must not be treated as safe to expose publicly.
+Put it behind one of:
 
 - a VPN — WireGuard or Tailscale, the simplest option for a handful of players
 - a forward-auth proxy — Authentik or Authelia
