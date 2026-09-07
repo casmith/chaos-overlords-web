@@ -122,7 +122,7 @@ entirely by mouse. The flag is gone.
 | `--framerate` | 30 | SPEC section 35; the game is 2D and mostly static |
 | `--video-bitrate` | 2000 kbps | Generous for 640×480 line art (Selkies' own default is 8000) |
 | `--audio-bitrate` | 96000 | Middle of SPEC section 36's 64–128 kbps |
-| `--enable-https` | `false` | TLS terminates at the reverse proxy (SPEC section 21) |
+| `--enable-https` | `true` | The client needs a secure context; see below |
 | `--enable-basic-auth` | off unless `WEB_PASSWORD` | Selkies refuses to start with auth on and no password, so this is an explicit either/or |
 | gamepad / webcam / microphone / file transfer / command | all off | Out of scope (SPEC section 3) and less attack surface (SPEC section 31) |
 
@@ -151,6 +151,33 @@ in eight seconds, and PulseAudio showed no sink input from the game and no
 source output from Selkies at the time. Whether that is the game being silent at
 that moment, or a client handshake step the test skipped, is Phase 3's first
 question. Do not read this section as "audio works".
+
+## HTTPS is not optional (corrected after testing)
+
+This was initially defaulted to `ENABLE_HTTPS=false`, reasoning from SPEC
+section 21 that TLS should terminate at a reverse proxy. That was wrong as a
+default, and the verification missed it: every browser test used
+`http://localhost`, which is the one HTTP origin browsers treat as a **secure
+context**. On any other address the client loads and then refuses with "a secure
+connection is required", gated on `isSecureContext` in `selkies-core.js`.
+
+The server is not the problem — it returns 200 on both origins. The browser
+declines to run the client.
+
+So HTTPS is now the default, on a self-signed certificate Selkies writes itself.
+SPEC section 21 is still honored: the container never manages a publicly trusted
+certificate, and `ENABLE_HTTPS=false` remains correct behind a proxy that
+terminates TLS. But a container that cannot be opened from another machine
+without extra configuration is not a working default.
+
+The generated certificate is issued for `localhost`, the container hostname and
+the loopback addresses — not for the host's LAN IP — so a browser reaching it at
+`https://192.168.x.y:8081` warns about both an unknown authority and a name
+mismatch. Verified working after clicking through: Chrome renders the live game
+from the LAN address.
+
+**Lesson for later phases: `localhost` is not a representative test origin for
+anything browser-facing.**
 
 ## Still open
 

@@ -32,9 +32,13 @@
 # --- Browser streaming (Selkies) ---------------------------------------------
 : "${ENABLE_SELKIES:=true}"
 : "${WEB_PORT:=8080}"
-# TLS normally terminates at a reverse proxy, so the container serves plain
-# HTTP. Set ENABLE_HTTPS=true to have Selkies serve its own self-signed pair.
-: "${ENABLE_HTTPS:=false}"
+# HTTPS is on by default, on a self-signed certificate Selkies writes itself.
+# This is not about eavesdropping: the browser client requires a secure context
+# to run at all, and only "localhost" qualifies over plain HTTP. Served over
+# HTTP on any other address -- a LAN IP, a hostname -- the page loads and then
+# refuses with "secure connection is required".
+# Set ENABLE_HTTPS=false when a reverse proxy terminates TLS in front.
+: "${ENABLE_HTTPS:=true}"
 # Basic auth is off until a password is set. Selkies itself refuses to start
 # with auth enabled and no password, so this is an explicit either/or.
 : "${WEB_USER:=player}"

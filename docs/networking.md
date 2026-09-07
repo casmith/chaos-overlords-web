@@ -108,9 +108,14 @@ Two caveats worth knowing before going down this road:
 
 ## Reverse proxy
 
-TLS terminates at the proxy; the container never manages certificates
-(SPEC section 21) and serves plain HTTP by default. Because the transport is
-plain WebSockets over one port, the proxy requirements are the ordinary ones:
+The container serves HTTPS on a self-signed certificate by default, because the
+browser client needs a secure context to run anywhere but `localhost`. Behind a
+proxy that terminates TLS, set `ENABLE_HTTPS=false` and let the proxy present
+the real certificate — the container still never manages a publicly trusted one
+(SPEC section 21).
+
+Because the transport is plain WebSockets over one port, the proxy requirements
+are the ordinary ones:
 
 - **Forward the WebSocket upgrade.** `Upgrade` and `Connection` headers on
   `/api/websockets`, or on the whole prefix.
@@ -147,7 +152,8 @@ from the transport rather than from measurement; treat them as a starting point.
 
 What is true regardless of proxy:
 
-- The container listens on plain HTTP only, on the container network.
+- The container listens on one port, HTTPS by default and HTTP when
+  `ENABLE_HTTPS=false`.
 - Nothing in the container assumes a particular external hostname.
 - The streaming port is unauthenticated unless `WEB_PASSWORD` is set.
 

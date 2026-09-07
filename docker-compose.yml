@@ -4,8 +4,12 @@
 #   docker compose build
 #   docker compose up -d
 #
-# Then open http://<docker-host>:8081 for player 1 and :8082 for player 2.
+# Then open https://<docker-host>:8081 for player 1 and :8082 for player 2.
 # Video, audio, mouse and keyboard all ride that single port.
+#
+# HTTPS, on a self-signed certificate, because the browser client needs a secure
+# context to run anywhere but localhost. Your browser will warn once. Set
+# ENABLE_HTTPS=false only when a reverse proxy terminates TLS in front.
 #
 # The streaming port is unauthenticated unless WEB_PASSWORD is set. Keep it on a
 # trusted network, or put a VPN or authenticating reverse proxy in front.
@@ -34,7 +38,7 @@ services:
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
-      ENABLE_HTTPS: ${ENABLE_HTTPS:-false}
+      ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
       WEB_USER: ${WEB_USER:-player}
       WEB_PASSWORD: ${WEB_PASSWORD:-}
       ENABLE_VNC: ${ENABLE_VNC:-false}
@@ -74,7 +78,7 @@ services:
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
-      ENABLE_HTTPS: ${ENABLE_HTTPS:-false}
+      ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
       WEB_USER: ${WEB_USER:-player}
       WEB_PASSWORD: ${WEB_PASSWORD:-}
       ENABLE_VNC: ${ENABLE_VNC:-false}

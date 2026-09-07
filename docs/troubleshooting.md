@@ -161,6 +161,33 @@ The game is a fixed-resolution DirectDraw-era title.
   preferences include a `prefsVidDeep` flag suggesting it cares about colour
   depth.
 
+## "A secure connection is required"
+
+The page loads and then refuses with this message. The server is fine — it is
+the browser client declining to run outside a **secure context**.
+
+Browsers grant a secure context to HTTPS origins and to `localhost`, and to
+nothing else. Over plain HTTP, `http://localhost:8081` works and
+`http://192.168.1.50:8081` does not, however identical the server.
+
+The fix is to serve HTTPS, which is the default:
+
+```bash
+docker run -e ENABLE_HTTPS=true ...     # or leave it unset
+```
+
+Then use `https://`. The certificate is self-signed and issued for `localhost`,
+the container hostname and the loopback addresses — **not** for your LAN IP — so
+the browser warns about both an unknown authority and a name mismatch. Click
+through once per browser.
+
+To avoid the warning, either put a reverse proxy with a real certificate in
+front (and then set `ENABLE_HTTPS=false`, since TLS terminates there), or mount
+your own certificate and point `SELKIES_HTTPS_CERT` / `SELKIES_HTTPS_KEY` at it.
+
+`ENABLE_HTTPS=false` is correct only behind a proxy that terminates TLS, or when
+every client reaches the container as `localhost`.
+
 ## The browser page does not load
 
 ```bash

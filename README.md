@@ -64,9 +64,15 @@ docker logs -f chaos1
 Then open a browser:
 
 ```
-http://docker-host:8081     player 1
-http://docker-host:8082     player 2
+https://docker-host:8081     player 1
+https://docker-host:8082     player 2
 ```
+
+**Note the `https`.** The container serves TLS on a self-signed certificate, and
+your browser will warn once — click through. This is not optional politeness:
+the streaming client refuses to run outside a browser "secure context", and
+plain HTTP only qualifies as one on `localhost`. Set `ENABLE_HTTPS=false` only
+when a reverse proxy terminates TLS in front.
 
 That is the whole client. There is **no login by default** — set `WEB_PASSWORD`
 in `.env` to turn on basic authentication, and keep these ports on a trusted
@@ -194,7 +200,7 @@ All of these are set in `.env` or per-service in `docker-compose.yml`.
 | `WEB_PORT` | `8080` | In-container streaming port |
 | `WEB_USER` | `player` | Basic-auth username |
 | `WEB_PASSWORD` | empty | Set to enable basic auth; empty means no login |
-| `ENABLE_HTTPS` | `false` | Serve HTTPS on a self-signed cert instead of plain HTTP |
+| `ENABLE_HTTPS` | `true` | Serve HTTPS on a self-signed cert; false only behind a TLS proxy |
 | `WEB_SUBFOLDER` | empty | URL prefix when proxied under a subpath |
 | `VIDEO_ENCODER` | `h264enc` | `h264enc`, `h264enc-striped` or `jpeg` |
 | `VIDEO_FPS` | `30` | Frame rate; 15 for a low-bandwidth link |
