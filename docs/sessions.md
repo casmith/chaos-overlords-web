@@ -55,11 +55,55 @@ leaving.
 | **Player connects** | The manager counts the WebSocket and keeps the session alive for as long as it is open. |
 | **Nobody watching for `IDLE_MINUTES`** | Container stopped and removed. **The volume is kept**, so saves, settings and the Wine prefix survive. |
 | **Player returns to their link** | The session is recreated against the same volume automatically. They see a "starting" page for ~15 s, then the game as they left it. |
-| **Stopped for `RETENTION_HOURS`** | The volume is removed and the session disappears. This is the only automatic data loss. |
-| **Delete** | Container and volume removed immediately. |
+| **Stopped for `RETENTION_HOURS`** | Only when set. At the default of `0` nothing is ever removed automatically. |
+| **Delete** | Container and volume removed immediately. The only way a save is lost. |
 
 Stopping a session gives Wine 30 seconds to close the game and flush its saves
 first, the same as `docker stop` on a fixed instance.
+
+## Saves are kept indefinitely
+
+`RETENTION_HOURS=0` is the default and means exactly that: a stopped session is
+removed only when someone presses **Delete**. Stopping a session frees its CPU
+and memory, never its data.
+
+Two things make that safe to rely on.
+
+**The save volume describes itself.** Each session's volume carries the session
+id, password, name and creation time as Docker labels, so the saves do not
+depend on the manager's `sessions.json` surviving. If that state is lost — a
+wiped volume, a rolled-back deployment, a rebuilt host with the volumes intact —
+the manager rebuilds the sessions from the volumes on startup:
+
+```
+[sessions] adopted save volume chaos-session-f33j9p-config as session f33j9p
+```
+
+The player's original link and password keep working. This is tested by
+deleting the manager's entire state volume and confirming the save comes back.
+
+**Nothing else deletes a volume.** The reaper removes containers; only an
+explicit delete, or a retention window you set yourself, removes data.
+
+### The disk cost
+
+A session volume is roughly **650 MB** — mostly the Wine prefix, plus the
+patched copy of the game. Keeping saves forever is a real commitment, so watch
+it:
+
+```bash
+docker system df -v | grep chaos-session
+```
+
+To prune by hand, delete the session from the landing page, or:
+
+```bash
+docker volume rm chaos-session-<id>-config
+```
+
+If you would rather have it swept automatically, set `RETENTION_HOURS` to a
+number of hours; stopped sessions idle for longer than that are removed with
+their data.
 
 ## Security model
 
@@ -155,7 +199,7 @@ link they can actually use.
 | `ALLOWED_ORIGINS` | empty | Extra permitted browser origins; `*` disables the check |
 | `MAX_SESSIONS` | `6` | Refuse to create more live sessions than this |
 | `IDLE_MINUTES` | `30` | Stop a session after this long with nobody watching |
-| `RETENTION_HOURS` | `72` | Delete a stopped session's saves after this long |
+| `RETENTION_HOURS` | `0` | Delete a stopped session's saves after this long; `0` keeps them indefinitely |
 | `SESSION_MEM_LIMIT` | `1g` | Memory cap per session |
 | `SESSION_CPU_LIMIT` | `2` | CPU cap per session |
 | `SESSION_ENV` | empty | Extra env for sessions, e.g. `VIDEO_FPS=30,DEBUG=true` |
@@ -181,9 +225,10 @@ docker logs chaos-session-<id>
 ```
 
 Session state lives in `/data/sessions.json` on the `manager-data` volume, plus
-the containers and volumes themselves. On startup the manager reconciles the two:
-a session whose container is gone is marked stopped, and a managed container with
-no session record is removed, since its password cannot be recovered.
+the containers and volumes themselves. On startup the manager reconciles them:
+a session whose container is gone is marked stopped, a managed container with no
+session record is removed (its password cannot be recovered), and a save volume
+with no session record is **adopted** from its own labels.
 
 `/data/sessions.json` **contains session passwords** in plain text, mode `0600`.
 It is on a private volume, and anyone who can read it could already read the

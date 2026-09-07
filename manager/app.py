@@ -51,7 +51,8 @@ def load_config() -> dict:
         "session_env": _env_map(os.environ.get("SESSION_ENV", "")),
         "max_sessions": int(os.environ.get("MAX_SESSIONS", "6")),
         "idle_minutes": int(os.environ.get("IDLE_MINUTES", "30")),
-        "retention_hours": int(os.environ.get("RETENTION_HOURS", "72")),
+        # 0 keeps saves indefinitely; a stopped session is only removed on request.
+        "retention_hours": int(os.environ.get("RETENTION_HOURS", "0")),
         "reap_interval": int(os.environ.get("REAP_INTERVAL", "60")),
         "start_timeout": int(os.environ.get("START_TIMEOUT", "180")),
         "stop_timeout": int(os.environ.get("STOP_TIMEOUT", "30")),
@@ -245,9 +246,11 @@ async def on_startup(app: web.Application) -> None:
     await mgr.start()
     app["reaper"] = asyncio.create_task(mgr.reap_loop())
     cfg = app["cfg"]
-    log.info("session manager ready: image=%s network=%s idle=%dm retention=%dh max=%d",
+    retention = (f"{cfg['retention_hours']}h" if cfg["retention_hours"]
+                 else "saves kept indefinitely")
+    log.info("session manager ready: image=%s network=%s idle=%dm retention=%s max=%d",
              cfg["image"], cfg["network"], cfg["idle_minutes"],
-             cfg["retention_hours"], cfg["max_sessions"])
+             retention, cfg["max_sessions"])
     if not cfg["admin_password"]:
         log.warning("ADMIN_PASSWORD is not set: anyone who can reach this page can "
                     "create and delete sessions")

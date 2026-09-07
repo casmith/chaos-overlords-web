@@ -27,6 +27,12 @@ log = logging.getLogger("sessions")
 
 LABEL_SESSION = "chaos.session.id"
 LABEL_MANAGED = "chaos.managed"
+# The volume carries everything needed to reach the save it holds. Saves can be
+# kept indefinitely, so they must not depend on one JSON file surviving: if the
+# manager's state is lost, sessions are rebuilt from the volumes themselves.
+LABEL_PASSWORD = "chaos.session.password"
+LABEL_LABEL = "chaos.session.label"
+LABEL_CREATED = "chaos.session.created"
 
 # Ambiguous characters are left out: these get read off a screen and typed by
 # hand, often dictated to someone else.
@@ -116,8 +122,25 @@ class SessionManager:
         except NotFound:
             return None
 
+    def _ensure_volume(self, session: Session):
+        """Create the session's volume, labelled so it describes itself."""
+        try:
+            return self.client.volumes.get(session.volume_name)
+        except NotFound:
+            return self.client.volumes.create(
+                name=session.volume_name,
+                labels={
+                    LABEL_MANAGED: "true",
+                    LABEL_SESSION: session.id,
+                    LABEL_PASSWORD: session.password,
+                    LABEL_LABEL: session.label,
+                    LABEL_CREATED: str(int(session.created)),
+                },
+            )
+
     def _create_container(self, session: Session):
         cfg = self.cfg
+        self._ensure_volume(session)
         env = {
             "WEB_SUBFOLDER": session.path,
             "WEB_PASSWORD": session.password,
@@ -179,7 +202,38 @@ class SessionManager:
             if sid and sid not in self.sessions:
                 log.warning("removing orphaned session container %s", c.name)
                 await self._run(c.remove, force=True)
+
+        await self.adopt_orphaned_volumes()
         self._save()
+
+    async def adopt_orphaned_volumes(self) -> None:
+        """Rebuild sessions for save volumes we have no record of.
+
+        Saves outlive containers and can be kept indefinitely, so a lost or
+        rolled-back state file must not strand them. Everything needed is on the
+        volume's own labels.
+        """
+        try:
+            volumes = await self._run(
+                self.client.volumes.list, filters={"label": f"{LABEL_MANAGED}=true"})
+        except APIError as exc:
+            log.warning("could not list session volumes: %s", exc)
+            return
+
+        for v in volumes:
+            labels = v.attrs.get("Labels") or {}
+            sid = labels.get(LABEL_SESSION)
+            password = labels.get(LABEL_PASSWORD)
+            if not sid or sid in self.sessions:
+                continue
+            if not password:
+                log.warning("volume %s has no recorded password; leaving it alone", v.name)
+                continue
+            created = float(labels.get(LABEL_CREATED) or time.time())
+            self.sessions[sid] = Session(
+                id=sid, password=password, label=labels.get(LABEL_LABEL, ""),
+                created=created, last_seen=created, status="stopped")
+            log.info("adopted save volume %s as session %s", v.name, sid)
 
     async def create(self, label: str = "") -> Session:
         async with self._lock:
@@ -265,6 +319,8 @@ class SessionManager:
 
     async def reap_loop(self) -> None:
         idle_after = self.cfg["idle_minutes"] * 60
+        # RETENTION_HOURS=0 keeps saves indefinitely: a stopped session is only
+        # ever removed when someone asks for it to be.
         retention = self.cfg["retention_hours"] * 3600
         while True:
             await asyncio.sleep(self.cfg["reap_interval"])

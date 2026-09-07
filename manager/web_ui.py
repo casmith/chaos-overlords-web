@@ -61,7 +61,7 @@ def _session_card(s, cfg, is_new: bool) -> str:
     if s.active_conns:
         meta = f"{s.active_conns} viewer{'s' if s.active_conns != 1 else ''} connected"
     elif s.status == "stopped":
-        meta = f"stopped, saves kept &middot; idle {_ago(idle)}"
+        meta = f"stopped &middot; save kept &middot; idle {_ago(idle)}"
     else:
         meta = f"idle {_ago(idle)}"
 
@@ -99,6 +99,10 @@ def render_page(sessions, cfg, new_id: str = "") -> str:
     items = sorted(sessions, key=lambda s: s.created, reverse=True)
     cards = "".join(_session_card(s, cfg, s.id == new_id) for s in items) or \
         '<div class="empty">No sessions yet. Start one below.</div>'
+    hours = cfg.get("retention_hours", 0)
+    retention_note = ("Saves are kept indefinitely &mdash; nothing is deleted "
+                      "unless you delete it." if not hours else
+                      f"Saves are kept for {hours} hours after that.")
     starting = any(s.status == "starting" for s in items)
     refresh = '<meta http-equiv="refresh" content="5">' if starting else ""
 
@@ -111,7 +115,7 @@ def render_page(sessions, cfg, new_id: str = "") -> str:
   <h1><span>Chaos</span> Overlords &mdash; sessions</h1>
   <p class="sub">One container per player. Each gets its own password, and is
      shut down after {cfg['idle_minutes']} minutes with nobody watching.
-     Saves are kept for {cfg['retention_hours']} hours after that.</p>
+     {retention_note}</p>
 
   {cards}
 

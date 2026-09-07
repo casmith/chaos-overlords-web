@@ -40,7 +40,8 @@ services:
       # Lifecycle.
       MAX_SESSIONS: ${MAX_SESSIONS:-6}
       IDLE_MINUTES: ${IDLE_MINUTES:-30}
-      RETENTION_HOURS: ${RETENTION_HOURS:-72}
+      # 0 = keep saves indefinitely (see docs/sessions.md).
+      RETENTION_HOURS: ${RETENTION_HOURS:-0}
 
       # Per-session resource caps, and anything else to pass through to the
       # game containers, e.g. SESSION_ENV=VIDEO_FPS=30,WINE_WINDOWS_VERSION=win98
