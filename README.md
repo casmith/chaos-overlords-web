@@ -14,7 +14,7 @@ your own copy.
 |---|---|---|
 | 1 | Game runs under Wine in Docker | **implemented and verified** |
 | 2 | Browser video, mouse, keyboard (Selkies) | **implemented and verified** |
-| 3 | Game audio in the browser | **works** (sound effects; music needs the CD) |
+| 3 | Game audio in the browser | **works** (music too, with the GOG copy) |
 | 4 | Two-instance TCP/IP multiplayer | connect verified; full game untested |
 | 5 | Network discovery testing | **done** — TCP 4269, bridge networking is enough |
 | 6 | Productionisation | partly in place |
@@ -27,8 +27,9 @@ browser input path.
 
 Audio rides the same connection and works. Two caveats worth knowing up front:
 the in-game volume sliders do nothing (the game drives them through an API Wine
-has no device for — use the browser's volume instead), and there is no music
-unless you have the original CD, because the soundtrack is Red Book CD audio.
+has no device for — use the browser's volume instead), and music needs the **GOG
+release**, which ships the soundtrack as Ogg files and a shim to play them. A
+retail CD rip has no music, because the original is Red Book audio on the disc.
 Both are explained in [docs/audio-findings.md](docs/audio-findings.md).
 
 What testing established is in

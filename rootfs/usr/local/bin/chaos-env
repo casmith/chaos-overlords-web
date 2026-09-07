@@ -82,6 +82,21 @@ fi
 # Stop Wine from trying to download Mono/Gecko on first boot.
 : "${WINEDLLOVERRIDES:=mscoree,mshtml=}"
 
+# The GOG release ships its own winmm.dll: a shim that answers the game's MCI
+# "cdaudio" calls by playing MUSIC/TrackNN.ogg through the libvorbis DLLs beside
+# it. That is the whole soundtrack, which is otherwise Red Book audio on a disc
+# the container has no drive for.
+#
+# Wine loads its builtin winmm unless told otherwise, so without this the shim
+# sits unused next to the game and there is simply no music. Detected from the
+# files rather than configured, because a copy that has it always wants it and
+# one that does not has nothing to override.
+if [ -z "${WINEDLLOVERRIDES##*winmm*}" ]; then
+    :   # the operator already said something about winmm; leave it alone
+elif [ -n "$(find "${GAME_DIR}" -maxdepth 1 -iname 'winmm.dll' -print -quit 2>/dev/null)" ]; then
+    WINEDLLOVERRIDES="${WINEDLLOVERRIDES};winmm=n,b"
+fi
+
 export CONFIG_DIR GAME_DIR GAME_WIN_DIR GAME_UNIX_DIR
 export WINEPREFIX WINEARCH WINE_WINDOWS_VERSION WINE_VIRTUAL_DESKTOP
 export PATCH_DIALOG_VISIBILITY

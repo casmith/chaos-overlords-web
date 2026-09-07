@@ -35,6 +35,38 @@ If auto-detection picks the wrong file, set `GAME_EXE` explicitly in `.env`:
 GAME_EXE=/game/Chaos Overlords.exe
 ```
 
+## The GOG release is the better copy
+
+If you have a choice, use it. Alongside the same data files it ships:
+
+- **`MUSIC/Track02.ogg` … `Track09.ogg`** — the soundtrack, plus its own
+  `winmm.dll` and the libvorbis DLLs to play it. A retail rip has no music at
+  all, because the original is Red Book CD audio and there is no disc in a
+  container. The container detects the shim and enables it automatically; see
+  [audio-findings.md](audio-findings.md).
+- **No serial number** to import, so `chaosreg.reg` is not needed.
+- The manual and readme as PDFs, which do no harm.
+
+Its executable is a different binary from the retail one, but everything the
+container does works the same on it: the dialog patch applies to the same three
+templates, and its bundled winsock DLLs are not loaded, so multiplayer behaves
+identically.
+
+A typical GOG install looks like:
+
+```
+chaos/
+├── Chaos Overlords.exe
+├── winmm.dll                 the CD-audio-to-Ogg shim
+├── libogg-0.dll  libvorbis-0.dll  libvorbisfile-3.dll
+├── MUSIC/Track02.ogg ... Track09.ogg
+├── DATA/  HELP/
+└── SMACKW32.DLL
+```
+
+Point `GAME_PATH` straight at it — Heroic installs to something like
+`~/Games/Heroic/Chaos Overlords`.
+
 ## Using a different directory
 
 Point `GAME_PATH` at wherever your files already live:

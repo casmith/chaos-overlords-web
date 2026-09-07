@@ -116,10 +116,41 @@ and the browser's own per-tab volume works too. Both sit after the game in the
 chain, so they do what the in-game slider was meant to do. This is why
 `--ui-sidebar-show-audio-settings` is deliberately left enabled.
 
-## The music is CD audio, and needs the disc
+## The music is CD audio — which the GOG release solves
 
-Music is not broken and not a bad copy of the game. It is Red Book audio from
-the original CD, and the container has no CD drive.
+**Short version: use the GOG copy and you get the soundtrack.** The analysis
+below is still why, and still applies to a retail CD rip.
+
+GOG's release ships the soundtrack as `MUSIC/Track02.ogg` … `Track09.ogg`
+(Ogg Vorbis, 44.1 kHz stereo, ~45 MB) alongside its own `winmm.dll` and the
+`libogg` / `libvorbis` / `libvorbisfile` DLLs. That `winmm.dll` is a shim: it
+exports the whole `mci*` API and answers the game's `cdaudio` calls by playing
+those Ogg files instead of a disc.
+
+Wine loads its **builtin** winmm unless told otherwise, so the shim would sit
+unused next to the game. The container therefore adds `winmm=n,b` to
+`WINEDLLOVERRIDES` when it finds a `winmm.dll` in the game directory —
+detected from the files, not configured, because a copy that ships one always
+wants it and a copy that does not has nothing to override.
+
+Confirmed working: with the GOG copy and no manual configuration, Wine loads
+`C:\games\Chaos\WINMM.dll` and `libvorbisfile-3.dll` as **native**, and the
+title screen plays ten seconds of continuous audio where the retail copy is
+silent. The retail copy is unaffected — it has no `winmm.dll`, so no override is
+added.
+
+The GOG executable is a different binary from the retail one, but the dialog
+patch applies identically (the same three templates at the same offsets), and it
+needs no serial number in the registry.
+
+Its bundled `wsock32.dll`, `mswsock.dll`, `dpwsockx.dll` and `ipxwrapper.dll`
+are **not** loaded — Wine uses its builtin winsock — so multiplayer behaves
+exactly as measured in [multiplayer-findings.md](multiplayer-findings.md).
+
+## Why a retail rip has no music
+
+With a retail rip, music is not broken and not a bad copy of the game. It is
+Red Book audio from the original CD, and the container has no CD drive.
 
 Wine's MCI trace, taken at startup:
 
@@ -134,17 +165,14 @@ device exists, and the game carries on without music. That also explains the
 `prefsVolumeCD` key in the shipped registry, and why the volume slider is wired
 to the aux API — aux *was* the CD-audio volume control.
 
-Making it play would mean presenting a real CD device with the original audio
-tracks to the container. A ripped copy of the data files cannot do it: Red Book
-tracks are not files on the data track. Options, none implemented:
+Making a *retail rip* play music would mean presenting a real CD device to the
+container — the tracks are not files on the data track, so no amount of copying
+data files produces them. Passing a host drive through with `--device /dev/sr0`
+and the disc in it would work; so would emulating one with `cdemu`, which needs
+a kernel module and is therefore a host change rather than a container one.
 
-- Pass a host CD drive through with `--device /dev/sr0` and the original disc in
-  it. Wine's `cdaudio` MCI driver can drive a real device.
-- Emulate one on the host with something like `cdemu` and pass that device in.
-  It needs a kernel module, so it is a host-level change, not a container one.
-
-Neither is worth building unless someone actually wants the soundtrack; sound
-effects, which are the part that matters in play, work without a disc.
+Neither is worth building, because the GOG release makes the whole question moot:
+it ships the same tracks as Ogg files and a shim to play them.
 
 ## Summary
 
@@ -153,4 +181,4 @@ effects, which are the part that matters in play, work without a disc.
 | Audio reaches the browser | — | works |
 | Scratchy | 8-bit 22 kHz source, plus a double resample at the lowest quality | source is inherent; the double resample is fixed, effect unconfirmed |
 | In-game volume does nothing | Game uses the aux API; Wine registers no aux device | cannot be fixed in the container — use the browser's volume |
-| No music | Red Book CD audio via MCI, no disc present | expected without the CD; not a bad copy |
+| No music | Red Book CD audio via MCI, no disc present | **solved by using the GOG copy**, which ships the tracks as Ogg plus a winmm shim; a retail rip still needs the disc |
