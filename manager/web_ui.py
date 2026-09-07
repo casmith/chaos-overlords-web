@@ -98,7 +98,7 @@ def _session_card(s, cfg, is_new: bool) -> str:
 
 
 def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
-                who: str = "") -> str:
+                who: str = "", accounts: list | None = None) -> str:
     items = sorted(sessions, key=lambda s: s.created, reverse=True)
     cards = "".join(_session_card(s, cfg, s.id == new_id) for s in items) or \
         '<div class="empty">No sessions yet. Start one below.</div>'
@@ -106,12 +106,38 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
     retention_note = ("Saves are kept indefinitely &mdash; nothing is deleted "
                       "unless you delete it." if not hours else
                       f"Saves are kept for {hours} hours after that.")
+    accounts = accounts or []
     is_admin = role == "admin"
+
+    # A player who has just claimed a name can do exactly one thing.
+    if role == "claiming":
+        return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Choose a password</title><style>{STYLE}</style></head>
+<body><div class="wrap">
+  <h1><span>Chaos</span> Overlords</h1>
+  <p class="sub">The name <strong>{html.escape(who)}</strong> is yours. Choose a
+     password for it. From now on this is how you sign in &mdash; the shared
+     invite password will not open your games again.</p>
+  <div class="card">
+    <form method="post" action="/api/account/password">
+      <div class="row">
+        <input type="password" name="password" placeholder="New password"
+               minlength="6" required>
+        <input type="password" name="confirm" placeholder="Repeat it"
+               minlength="6" required>
+        <button class="primary" type="submit">Claim {html.escape(who)}</button>
+      </div>
+    </form>
+  </div>
+  <p class="note">At least six characters. Your browser will ask you to sign in
+     again straight afterwards, with the password you just chose.</p>
+</div></body></html>"""
     intro = ("One container per player, each with its own password."
              if is_admin else "Start a game, and it is yours alone.")
     whoami = ("" if is_admin else
-              f'<br>Signed in as <strong>{html.escape(who)}</strong> &mdash; sign in '
-              f'with the same name later to find your games again.')
+              f'<br>Signed in as <strong>{html.escape(who)}</strong>.')
     label_field = ('<input type="text" name="label" placeholder="Player name (optional)" '
                    'maxlength="40">' if is_admin else "")
     footer = (
@@ -126,6 +152,32 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
         "and password shown above. Closing the tab leaves it running for a few more "
         "minutes, then it stops and your save is kept &mdash; come back to the same "
         "link any time.")
+    if is_admin:
+        rows = "".join(
+            f'<div class="row" style="margin-top:.4rem"><div class="grow">'
+            f'<code>{html.escape(n)}</code></div>'
+            f'<form class="inline" method="post" action="/api/accounts/{html.escape(n)}/release" '
+            f'onsubmit="return confirm(\'Release {html.escape(n)}? They can claim it again '
+            f'with the invite password, and keep their games.\')">'
+            f'<button>Release</button></form></div>' for n in accounts)
+        extra = (f'<div class="card" style="margin-top:1.5rem">'
+                 f'<div class="name">Player accounts</div>'
+                 f'<div class="meta">A name is claimed on first sign-in and then needs its '
+                 f'own password. Release one if a player forgets theirs &mdash; their games '
+                 f'are kept.</div>{rows or "<div class=meta>None claimed yet.</div>"}</div>'
+                 if accounts or True else "")
+    else:
+        extra = (
+            '<div class="card" style="margin-top:1.5rem">'
+            '<div class="name">Change your password</div>'
+            '<form method="post" action="/api/account/password">'
+            '<div class="row" style="margin-top:.6rem">'
+            '<input type="password" name="current" placeholder="Current password" required>'
+            '<input type="password" name="password" placeholder="New password" '
+            'minlength="6" required>'
+            '<input type="password" name="confirm" placeholder="Repeat it" '
+            'minlength="6" required>'
+            '<button type="submit">Change</button></div></form></div>')
     starting = any(s.status == "starting" for s in items)
     refresh = '<meta http-equiv="refresh" content="5">' if starting else ""
 
@@ -148,6 +200,8 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
       <button class="primary" type="submit">New session</button>
     </div>
   </form>
+
+  {extra}
 
   <p class="note">{footer}</p>
 </div></body></html>"""

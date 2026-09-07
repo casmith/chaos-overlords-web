@@ -179,6 +179,14 @@ from the LAN address.
 **Lesson for later phases: `localhost` is not a representative test origin for
 anything browser-facing.**
 
+This lesson was then ignored once. The session manager added later was tested
+the same way — over `http://localhost:8000` — and shipped serving plain HTTP,
+so sessions opened at a LAN address loaded and never started, for exactly the
+reason above. The manager now serves HTTPS by default too, on a self-signed
+certificate it generates itself, and names the operator's own addresses in it
+via `MANAGER_CERT_HOSTS`. Anything that puts a browser in front of Selkies has
+to be tested from a non-loopback origin.
+
 ## Still open
 
 - **Page title.** The browser tab reads "Selkies"; `--ui-title` changes the

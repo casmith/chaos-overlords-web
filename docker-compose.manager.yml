@@ -43,6 +43,16 @@ services:
       # your reverse proxy serves, e.g. https://chaos.example.com
       PUBLIC_URL: ${PUBLIC_URL:-}
 
+      # HTTPS on a self-signed certificate, generated on first start. Not
+      # optional politeness: the streaming client refuses to run outside a
+      # browser "secure context", and plain HTTP is only one on localhost, so
+      # over HTTP a session opened from any other machine never starts.
+      # Set false ONLY when a reverse proxy in front terminates TLS.
+      MANAGER_ENABLE_HTTPS: ${MANAGER_ENABLE_HTTPS:-true}
+      # Extra names/IPs to put in that certificate, so browsers do not also
+      # complain about a name mismatch, e.g. "192.168.1.50,chaos.lan"
+      MANAGER_CERT_HOSTS: ${MANAGER_CERT_HOSTS:-}
+
       # Lifecycle.
       MAX_SESSIONS: ${MAX_SESSIONS:-6}
       IDLE_MINUTES: ${IDLE_MINUTES:-30}
@@ -67,6 +77,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - manager-data:/data
     ports:
+      # https://<host>:8000 by default. See MANAGER_ENABLE_HTTPS above.
       - "${MANAGER_PORT:-8000}:8000"
     networks:
       - chaos-net

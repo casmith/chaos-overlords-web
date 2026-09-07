@@ -16,8 +16,20 @@ cp .env.example .env                                    # set GAME_PATH_ABS, ADM
 docker compose -f docker-compose.manager.yml up -d
 ```
 
-Open `http://your-host:8000`, log in with `ADMIN_USER` / `ADMIN_PASSWORD`, and
-press **New session**. You get a link and a password to hand to a player.
+Open `https://your-host:8000` — note the **https** — log in with `ADMIN_USER` /
+`ADMIN_PASSWORD`, and press **New session**. You get a link, a username and a
+password to hand to a player.
+
+The manager generates its own self-signed certificate, so your browser warns
+once; click through. This is not optional politeness: the streaming client
+refuses to run outside a browser *secure context*, and plain HTTP only counts as
+one on `localhost`. Served over HTTP, a session opened from any other machine
+loads the page and then never starts. Put the addresses players will actually
+type into `MANAGER_CERT_HOSTS` (e.g. `192.168.1.50,chaos.lan`) and the
+certificate names them, leaving only the untrusted-issuer warning.
+
+Behind a reverse proxy that terminates TLS, set `MANAGER_ENABLE_HTTPS=false`
+and let the proxy present a real certificate.
 
 `GAME_PATH_ABS` must be an **absolute** host path. The manager asks the Docker
 daemon to bind-mount it, and the daemon resolves it on the host, not inside the
@@ -27,10 +39,8 @@ manager container.
 
 ```
 player browser
-   │  HTTPS
-   ▼
-your reverse proxy  (TLS terminates here)
-   │  HTTP
+   │  HTTPS -- a reverse proxy's real certificate, or, with nothing in front,
+   │           the manager's own self-signed one
    ▼
 chaos-manager :8000
    ├── /              landing page: create, resume, stop, delete
@@ -233,6 +243,8 @@ link they can actually use.
 | `INVITE_PASSWORD` | empty | Shared password letting players start their own sessions; empty keeps creation admin-only |
 | `MAX_SESSIONS_PER_GUEST` | `2` | How many sessions one guest name may hold |
 | `PUBLIC_URL` | empty | Base URL shown to players |
+| `MANAGER_ENABLE_HTTPS` | `true` | Serve HTTPS on a self-signed certificate; `false` only behind a TLS proxy |
+| `MANAGER_CERT_HOSTS` | empty | Extra names/IPs to put in that certificate |
 | `ALLOWED_ORIGINS` | empty | Extra permitted browser origins; `*` disables the check |
 | `MAX_SESSIONS` | `6` | Refuse to create more live sessions than this |
 | `IDLE_MINUTES` | `30` | Stop a session after this long with nobody watching |

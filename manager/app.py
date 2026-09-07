@@ -20,6 +20,8 @@ import aiohttp
 from aiohttp import web
 
 import session_auth
+import tls
+from accounts import Accounts, MIN_PASSWORD
 from sessions import SessionManager
 from proxy import proxy_http, proxy_websocket
 from web_ui import render_page, waiting_page
@@ -66,6 +68,13 @@ def load_config() -> dict:
         "invite_password": os.environ.get("INVITE_PASSWORD", ""),
         "max_sessions_per_guest": int(os.environ.get("MAX_SESSIONS_PER_GUEST", "2")),
         "public_url": os.environ.get("PUBLIC_URL", "").rstrip("/"),
+        # HTTPS on by default: the streaming client needs a browser secure
+        # context, and plain HTTP is only one on localhost. Turn it off when a
+        # reverse proxy terminates TLS in front of the manager.
+        "enable_https": os.environ.get("MANAGER_ENABLE_HTTPS", "true").lower() != "false",
+        "https_cert": os.environ.get("MANAGER_HTTPS_CERT", ""),
+        "https_key": os.environ.get("MANAGER_HTTPS_KEY", ""),
+        "cert_hosts": os.environ.get("MANAGER_CERT_HOSTS", ""),
         # Extra browser origins permitted to reach a session, comma separated.
         # Same-origin is always allowed; "*" disables the check.
         "allowed_origins": os.environ.get("ALLOWED_ORIGINS", ""),
@@ -106,12 +115,24 @@ def _identify(request: web.Request) -> tuple[str, str] | None:
             and _s.compare_digest(password, cfg["admin_password"])):
         return ("admin", user)
 
+    name = (user or "").strip()[:40]
+    if not name or name == cfg["admin_user"]:
+        # An empty name has nothing to file sessions under, and the admin name
+        # must not be claimable with a lesser password.
+        return None
+
+    accounts: Accounts = request.app["accounts"]
+
+    # A claimed name accepts only its own password. The invite password stops
+    # working for it the moment it is claimed -- that is what keeps players
+    # from signing in as each other.
+    if accounts.exists(name):
+        return ("guest", name) if accounts.verify(name, password) else None
+
+    # An unclaimed name is claimed with the shared invite password. The player
+    # is then required to set their own before they can do anything.
     if cfg["invite_password"] and _s.compare_digest(password, cfg["invite_password"]):
-        name = (user or "guest").strip()[:40] or "guest"
-        if name == cfg["admin_user"]:
-            # Not the admin password, so do not let the name claim the role.
-            name = "guest"
-        return ("guest", name)
+        return ("claiming", name)
     return None
 
 
@@ -127,6 +148,8 @@ async def auth_middleware(request: web.Request, handler):
             status=401, text="Authentication required.",
             headers={"WWW-Authenticate": f'Basic realm="{realm}"'})
     request["role"], request["who"] = who
+    if who[0] == "claiming" and request.path not in ("/", "/api/account/password"):
+        raise web.HTTPForbidden(text="Choose a password first.")
     return await handler(request)
 
 
@@ -134,6 +157,8 @@ def _visible(request: web.Request, sessions):
     """Admins see everything; a guest sees only what they own."""
     if request.get("role") == "admin":
         return list(sessions)
+    if request.get("role") == "claiming":
+        return []
     return [s for s in sessions if s.owner == request.get("who")]
 
 
@@ -149,7 +174,8 @@ async def index(request: web.Request) -> web.Response:
         text=render_page(_visible(request, mgr.sessions.values()), request.app["cfg"],
                          new_id=request.query.get("new", ""),
                          role=request.get("role", "admin"),
-                         who=request.get("who", "")),
+                         who=request.get("who", ""),
+                         accounts=request.app["accounts"].names()),
         content_type="text/html")
 
 
@@ -196,6 +222,46 @@ async def api_resume(request: web.Request) -> web.Response:
 async def api_delete(request: web.Request) -> web.Response:
     mgr, session = await _session_or_404(request)
     await mgr.delete(session)
+    raise web.HTTPFound("/")
+
+
+async def api_set_password(request: web.Request) -> web.Response:
+    """Claim a name, or change your own password. Guests only: the admin
+    password lives in the environment, not in the account store."""
+    if request.get("role") not in ("guest", "claiming"):
+        raise web.HTTPForbidden(text="The admin password is set in the environment.")
+    accounts: Accounts = request.app["accounts"]
+    name = request["who"]
+    data = await request.post()
+    new_password = str(data.get("password", ""))
+    confirm = str(data.get("confirm", ""))
+
+    # Changing an existing password requires proving you know the current one:
+    # a browser caches basic-auth credentials, so an unattended tab would
+    # otherwise be enough to lock the owner out.
+    if request["role"] == "guest":
+        if not accounts.verify(name, str(data.get("current", ""))):
+            raise web.HTTPBadRequest(text="Current password is not correct.")
+    if new_password != confirm:
+        raise web.HTTPBadRequest(text="The two passwords do not match.")
+    try:
+        accounts.set_password(name, new_password)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    # The browser is still sending the old credentials, so make it ask again.
+    return web.Response(
+        status=401,
+        text=f"Password set for {name}. Sign in again with your new password.",
+        headers={"WWW-Authenticate": f'Basic realm="Chaos Overlords - {name}"'})
+
+
+async def api_release_account(request: web.Request) -> web.Response:
+    """Admin: release a name so a forgetful player can claim it again."""
+    if request.get("role") != "admin":
+        raise web.HTTPForbidden(text="Admins only.")
+    accounts: Accounts = request.app["accounts"]
+    if not accounts.release(request.match_info["name"]):
+        raise web.HTTPNotFound(text="No such account.")
     raise web.HTTPFound("/")
 
 
@@ -278,9 +344,11 @@ async def session_proxy(request: web.Request) -> web.StreamResponse:
             value=session_auth.issue(secret, sid),
             path=f"/s/{sid}/", httponly=True, samesite="Lax",
             max_age=session_auth.COOKIE_TTL,
-            # Set Secure only when the edge really is HTTPS, or the cookie
-            # would be dropped in a plain-HTTP LAN deployment.
-            secure=request.headers.get("X-Forwarded-Proto", "").lower() == "https")
+            # Follow the real scheme: the proxy's header when there is one,
+            # otherwise whether this connection is itself TLS. Marking a cookie
+            # Secure over plain HTTP would make the browser drop it.
+            secure=(request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+                    or request.scheme == "https"))
     return await proxy_http(request, target, client, inject, cookie)
 
 
@@ -291,6 +359,7 @@ async def on_startup(app: web.Application) -> None:
         auto_decompress=False,
         timeout=aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=None))
     app["cookie_secret"] = session_auth.load_or_create_secret(app["cfg"]["state_dir"])
+    app["accounts"] = Accounts(app["cfg"]["state_dir"])
     app["allowed_origins"] = {o.strip() for o in app["cfg"]["allowed_origins"].split(",") if o.strip()}
     mgr = SessionManager(app["cfg"])
     app["mgr"] = mgr
@@ -320,6 +389,8 @@ def build_app() -> web.Application:
     app["cfg"] = load_config()
     app.router.add_get("/", index)
     app.router.add_get("/healthz", healthz)
+    app.router.add_post("/api/account/password", api_set_password)
+    app.router.add_post("/api/accounts/{name}/release", api_release_account)
     app.router.add_get("/api/sessions", api_list)
     app.router.add_post("/api/sessions", api_create)
     app.router.add_post("/api/sessions/{sid}/stop", api_stop)
@@ -333,7 +404,18 @@ def build_app() -> web.Application:
 
 
 if __name__ == "__main__":
-    web.run_app(build_app(),
+    app = build_app()
+    cfg = app["cfg"]
+    ssl_context = None
+    if cfg["enable_https"]:
+        ssl_context = tls.context(cfg["state_dir"], cfg["public_url"],
+                                  cfg["cert_hosts"], cfg["https_cert"], cfg["https_key"])
+        log.info("serving HTTPS; browsers warn once on a self-signed certificate")
+    else:
+        log.warning("serving plain HTTP: sessions will only work through a reverse "
+                    "proxy that terminates TLS, or from localhost")
+    web.run_app(app,
                 host=os.environ.get("BIND_ADDR", "0.0.0.0"),
                 port=int(os.environ.get("PORT", "8000")),
+                ssl_context=ssl_context,
                 access_log=None)

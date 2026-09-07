@@ -46,8 +46,9 @@ What testing established is in
 that creates a container per player when asked, gives each its own random
 password, proxies browsers to it, and shuts it down when nobody is watching.
 One port for your reverse proxy to sit in front of; sessions publish none at
-all. Set `INVITE_PASSWORD` and players start their own games without you.
-See [docs/sessions.md](docs/sessions.md).
+all, and it serves HTTPS itself so sessions work from other machines without a
+proxy. Set `INVITE_PASSWORD` and players claim their own account and start their
+own games without you. See [docs/sessions.md](docs/sessions.md).
 
 ## Quick start
 
