@@ -37,11 +37,12 @@ services:
       # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
       WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-jpeg}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
-      # 4:4:4 chroma; see docs/video-findings.md.
-      VIDEO_FULLCOLOR: ${VIDEO_FULLCOLOR:-true}
+      # 4:4:4 chroma. Off: it breaks Firefox and Brave outright, and only the
+      # h264 encoders use it anyway. See docs/video-findings.md.
+      VIDEO_FULLCOLOR: ${VIDEO_FULLCOLOR:-false}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
       ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
       WEB_USER: ${WEB_USER:-player}
@@ -82,11 +83,12 @@ services:
       # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
       WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-jpeg}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
-      # 4:4:4 chroma; see docs/video-findings.md.
-      VIDEO_FULLCOLOR: ${VIDEO_FULLCOLOR:-true}
+      # 4:4:4 chroma. Off: it breaks Firefox and Brave outright, and only the
+      # h264 encoders use it anyway. See docs/video-findings.md.
+      VIDEO_FULLCOLOR: ${VIDEO_FULLCOLOR:-false}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
       ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
       WEB_USER: ${WEB_USER:-player}

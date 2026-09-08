@@ -390,6 +390,25 @@ If the shim is active and the session is still at 100%, check that a debug
 channel is not enabled (`DEBUG=false`, which sets `WINEDEBUG=-all`), then see
 [cpu-findings.md](cpu-findings.md) for how the original diagnosis was made.
 
+## It works in Chrome but not Firefox or Brave
+
+Almost always `VIDEO_FULLCOLOR=true`. Firefox and Brave have no H.264 4:4:4
+decoder and refuse the session outright rather than falling back:
+
+> Error: This session streams video in a format this browser cannot decode.
+> Full color (4:4:4) needs a browser whose decoder has that profile.
+
+It defaults to `false` and only affects the `h264enc*` encoders. Check what a
+session is actually running:
+
+```bash
+docker exec chaos1 sh -c 'tr "\0" "\n" < /proc/$(pgrep -f selkies | head -1)/cmdline' \
+  | grep -E 'encoder|fullcolor'
+```
+
+Expect `--encoder=jpeg`. The JPEG encoder needs no video decoder at all, so it
+sidesteps this whole class of problem — see [video-findings.md](video-findings.md).
+
 ## Small details on the map look wrong or missing
 
 Most often: the little circle in a sector that says gangs are there. Its state
@@ -398,15 +417,16 @@ turn", and a red rather than green middle means enemy gangs are detected — and
 H.264's usual 4:2:0 chroma averages colour over 2x2 pixel blocks, which erases
 exactly that.
 
-The image encodes 4:4:4 by default now. Check it survived to the container:
+The image uses the JPEG encoder by default, which has no chroma subsampling to
+lose them to and needs no decoder in the browser. Check what is running:
 
 ```bash
-docker exec chaos1 sh -c 'tr "\0" "\n" < /proc/$(pgrep -f selkies | head -1)/cmdline' | grep fullcolor
+docker exec chaos1 sh -c 'tr "\0" "\n" < /proc/$(pgrep -f selkies | head -1)/cmdline' | grep encoder
 ```
 
-Expect `--video-fullcolor=true`. If a particular browser still looks soft while
-others are fine, that browser's decoder has no 4:4:4 profile and turned it off
-for itself; `VIDEO_ENCODER=jpeg` gives it a sharp picture instead.
+Expect `--encoder=jpeg`. On `h264enc` the marks are averaged away by 4:2:0
+chroma; `VIDEO_FULLCOLOR=true` fixes that but breaks Firefox and Brave, so
+switching the encoder is the answer rather than the chroma.
 
 Note the white box around the selected sector **flashes by design** — that is
 the Sector Selector, not a streaming fault. Full detail, and what the icons

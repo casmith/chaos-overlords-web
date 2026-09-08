@@ -54,13 +54,29 @@
 
 # Video: the game is 2D and mostly static, so 30 fps and a modest bitrate are
 # ample (SPEC sections 35 and 37). h264enc | h264enc-striped | jpeg.
-: "${VIDEO_ENCODER:=h264enc}"
+#
+# jpeg, not H.264, because this is pixel art in a 640x480 window and JPEG needs
+# no video decoder in the browser at all. Measured against the container's own
+# framebuffer it is sharper than H.264 4:2:0 (full-screen RMSE 0.0376 against
+# 0.0498), costs less CPU on a static screen (8.0% against 13.0%), and sends
+# the same bandwidth even through the intro cinematic (1.15 against 1.17
+# Mbit/s). See docs/video-findings.md.
+: "${VIDEO_ENCODER:=jpeg}"
 : "${VIDEO_FPS:=30}"
 : "${VIDEO_BITRATE:=2000}"
-# 4:4:4 chroma. The game draws meaning in two-pixel coloured marks, and
-# H.264's default 4:2:0 subsampling averages them away -- see
-# docs/video-findings.md. Costs about 1.5 points of CPU while streaming.
-: "${VIDEO_FULLCOLOR:=true}"
+# 4:4:4 chroma, and OFF, because turning it on breaks whole browsers.
+#
+# It only applies to the H.264 encoders, and it is not the graceful negotiation
+# its documentation promises: Firefox does not quietly fall back, it refuses
+# the session outright with "This session streams video in a format this
+# browser cannot decode." Brave the same. Chrome, which has the 4:4:4 profile,
+# is fine -- which is exactly how it reaches you, as "it only breaks in some
+# browsers". Leave this off unless every player is on Chrome.
+#
+# The problem it was meant to solve -- 4:2:0 averaging away the game's
+# two-pixel coloured marks -- is solved by the jpeg encoder above instead,
+# which has no chroma subsampling to lose them to. See docs/video-findings.md.
+: "${VIDEO_FULLCOLOR:=false}"
 
 # Opus, in bits per second (SPEC section 36 asks for 64-128 kbps).
 : "${AUDIO_BITRATE:=96000}"
