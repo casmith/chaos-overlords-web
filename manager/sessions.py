@@ -102,6 +102,9 @@ class SessionManager:
         self.client = docker.from_env()
         self.state_path = Path(cfg["state_dir"]) / "sessions.json"
         self._lock = asyncio.Lock()
+        # Set to the image name once a pull has failed, so the warning is
+        # logged once rather than on every session created.
+        self._pull_failed_for = ""
 
     # --- persistence ---------------------------------------------------------
 
@@ -157,8 +160,48 @@ class SessionManager:
                 },
             )
 
+    def _pull_image(self):
+        """Fetch the session image if the tag has moved since we last looked.
+
+        `containers.run` pulls only when the image is absent, so a moving tag
+        like :latest pins itself to whatever was pulled first and stays there
+        forever. `docker compose pull` does not help: sessions are created by
+        this manager at run time, not declared in the compose file, so the
+        session image is not one of the images compose knows about. The result
+        is a host that has been updated in every visible way and still starts
+        every new session on a months-old build.
+
+        Failure is not fatal. A registry that is unreachable, or a private
+        image with no credentials here, should mean "carry on with the image
+        we have", not "nobody can start a game".
+        """
+        image = self.cfg["image"]
+        if self._pull_failed_for == image:
+            return                              # already tried and said so
+        try:
+            before = self._image_id(image)
+            self.client.images.pull(image)
+            after = self._image_id(image)
+            if before and after and before != after:
+                log.info("session image %s updated (%s -> %s)",
+                         image, before[7:19], after[7:19])
+            elif not before:
+                log.info("session image %s pulled", image)
+        except (APIError, OSError) as exc:
+            # Once per image: a broken registry must not fill the log with one
+            # traceback per session created.
+            self._pull_failed_for = image
+            log.warning("could not refresh %s (%s); using the local copy", image, exc)
+
+    def _image_id(self, image: str) -> str:
+        try:
+            return self.client.images.get(image).id
+        except (NotFound, APIError):
+            return ""
+
     def _create_container(self, session: Session):
         cfg = self.cfg
+        self._pull_image()
         self._ensure_volume(session)
         # A session gets its own hostname when a wildcard domain is configured,
         # and shares the manager's hostname otherwise. Fixed here rather than

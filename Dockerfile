@@ -17,10 +17,18 @@
 # digest. Same distribution, same Python 3.13, so the native extensions match
 # our runtime ABI exactly.
 #
+# Expect this to need updating from time to time, and to find out by the build
+# failing with "not found": the tag moves, and upstream garbage-collects the
+# manifests nothing points at any more, digest pin or no digest pin. A local
+# build can keep working long after CI stops, because the layers are still in
+# the local cache -- so a green build here is not evidence the pin is still
+# fetchable.
+#
 # To update: docker pull ghcr.io/selkies-project/selkies/base:main-debiantrixie
 #            docker image inspect --format '{{index .RepoDigests 0}}' <that image>
+#            then rebuild and run it, because the Selkies inside has moved too
 # ---------------------------------------------------------------------------
-ARG SELKIES_IMAGE=ghcr.io/selkies-project/selkies/base@sha256:967edbbfce557e5cf0be12d9ef7e54d6fdd2457fcb00b75cc8f4a1595e02f6e3
+ARG SELKIES_IMAGE=ghcr.io/selkies-project/selkies/base@sha256:7b8d7d9b2a3050d34b4e2d0f02b60ba6040d59a1338d26161d416068ec918b58
 FROM ${SELKIES_IMAGE} AS selkies
 
 # ---------------------------------------------------------------------------

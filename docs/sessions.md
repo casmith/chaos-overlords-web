@@ -62,7 +62,7 @@ leaving.
 
 | Event | What happens |
 |---|---|
-| **New session** | Container created with a random 12-character password and `WEB_SUBFOLDER=/s/<id>`. Status `starting` until Docker reports it healthy. |
+| **New session** | `SESSION_IMAGE` is pulled if the tag has moved, then a container is created with a random 12-character password and `WEB_SUBFOLDER=/s/<id>`. Status `starting` until Docker reports it healthy. |
 | **Player connects** | The manager counts the WebSocket and keeps the session alive for as long as it is open. |
 | **Nobody watching for `IDLE_MINUTES`** | Container stopped and removed. **The volume is kept**, so saves, settings and the Wine prefix survive. |
 | **Player returns to their link** | The session is recreated against the same volume automatically. They see a "starting" page for ~15 s, then the game as they left it. |
@@ -345,6 +345,24 @@ link they can actually use.
 | `SESSION_IMAGE` | `chaos-overlords:latest` | Game image to start |
 | `SESSION_NETWORK` | `chaos-net` | Network sessions join |
 | `WEB_USER` | `player` | Username players type alongside their password |
+
+## Updating the game image
+
+Sessions are created by the manager at run time, so **the session image is not
+one of the images `docker compose` knows about** — `docker compose pull` updates
+nginx, certbot, cloudflared and the manager, and does not touch it. Before this
+was handled here, a host could be updated in every visible way and still start
+every new session on a months-old build.
+
+The manager therefore pulls `SESSION_IMAGE` itself whenever it creates a
+container, which covers both a new session and one being resumed after the idle
+reaper removed its container. A registry that is unreachable is not fatal: it
+logs once and carries on with the local copy.
+
+A session whose container still exists keeps the image it started with — Docker
+has no way to swap an image under a running container. To move a live session
+onto a new build, **Stop** it and open it again: stop removes the container, and
+opening the link recreates it.
 
 ## Operations
 
