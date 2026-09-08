@@ -25,6 +25,16 @@ args=(
     --framerate="${VIDEO_FPS}"
     --video-bitrate="${VIDEO_BITRATE}"
 
+    # 4:4:4 chroma instead of H.264's usual 4:2:0. 4:2:0 stores one colour
+    # sample per 2x2 block of pixels, which is invisible on video and ruinous
+    # on a 1996 UI: the game encodes information in marks a couple of pixels
+    # across -- the red ticks on a sector's gang circle mean "hired this turn"
+    # -- and averaging their colour over a 2x2 block erases them. Passed as an
+    # initial value rather than locked, so a browser whose decoder has no
+    # 4:4:4 profile quietly turns it off for itself instead of falling back to
+    # the JPEG encoder. See docs/video-findings.md.
+    --video-fullcolor="${VIDEO_FULLCOLOR}"
+
     # Out of scope for this project, and less attack surface for a service
     # fronting emulated 1990s software (SPEC sections 3 and 31).
     --command-enabled=false

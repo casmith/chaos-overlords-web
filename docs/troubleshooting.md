@@ -390,6 +390,28 @@ If the shim is active and the session is still at 100%, check that a debug
 channel is not enabled (`DEBUG=false`, which sets `WINEDEBUG=-all`), then see
 [cpu-findings.md](cpu-findings.md) for how the original diagnosis was made.
 
+## Small details on the map look wrong or missing
+
+Most often: the little circle in a sector that says gangs are there. Its state
+is carried in marks two pixels across — red ticks on the ring mean "hired this
+turn", and a red rather than green middle means enemy gangs are detected — and
+H.264's usual 4:2:0 chroma averages colour over 2x2 pixel blocks, which erases
+exactly that.
+
+The image encodes 4:4:4 by default now. Check it survived to the container:
+
+```bash
+docker exec chaos1 sh -c 'tr "\0" "\n" < /proc/$(pgrep -f selkies | head -1)/cmdline' | grep fullcolor
+```
+
+Expect `--video-fullcolor=true`. If a particular browser still looks soft while
+others are fine, that browser's decoder has no 4:4:4 profile and turned it off
+for itself; `VIDEO_ENCODER=jpeg` gives it a sharp picture instead.
+
+Note the white box around the selected sector **flashes by design** — that is
+the Sector Selector, not a streaming fault. Full detail, and what the icons
+mean, is in [video-findings.md](video-findings.md).
+
 ## Saves disappeared
 
 Saves live in the `/config` volume, inside the Wine prefix at

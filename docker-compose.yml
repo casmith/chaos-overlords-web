@@ -40,6 +40,8 @@ services:
       VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
+      # 4:4:4 chroma; see docs/video-findings.md.
+      VIDEO_FULLCOLOR: ${VIDEO_FULLCOLOR:-true}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
       ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
       WEB_USER: ${WEB_USER:-player}
@@ -83,6 +85,8 @@ services:
       VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
+      # 4:4:4 chroma; see docs/video-findings.md.
+      VIDEO_FULLCOLOR: ${VIDEO_FULLCOLOR:-true}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-96000}
       ENABLE_HTTPS: ${ENABLE_HTTPS:-true}
       WEB_USER: ${WEB_USER:-player}

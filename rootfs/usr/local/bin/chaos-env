@@ -57,6 +57,11 @@
 : "${VIDEO_ENCODER:=h264enc}"
 : "${VIDEO_FPS:=30}"
 : "${VIDEO_BITRATE:=2000}"
+# 4:4:4 chroma. The game draws meaning in two-pixel coloured marks, and
+# H.264's default 4:2:0 subsampling averages them away -- see
+# docs/video-findings.md. Costs about 1.5 points of CPU while streaming.
+: "${VIDEO_FULLCOLOR:=true}"
+
 # Opus, in bits per second (SPEC section 36 asks for 64-128 kbps).
 : "${AUDIO_BITRATE:=96000}"
 
@@ -111,7 +116,7 @@ export PATCH_DIALOG_VISIBILITY
 export DISPLAY DISPLAY_WIDTH DISPLAY_HEIGHT DISPLAY_DEPTH
 export ENABLE_AUDIO PULSE_SINK_NAME PULSE_RUNTIME_PATH PULSE_SERVER
 export ENABLE_SELKIES WEB_PORT ENABLE_HTTPS WEB_USER WEB_PASSWORD WEB_SUBFOLDER
-export VIDEO_ENCODER VIDEO_FPS VIDEO_BITRATE AUDIO_BITRATE
+export VIDEO_ENCODER VIDEO_FPS VIDEO_BITRATE VIDEO_FULLCOLOR AUDIO_BITRATE
 export ENABLE_VNC VNC_PORT
 export DEBUG GAME_RESTART_DELAY GAME_MAX_RESTARTS APP_USER APP_GROUP TZ
 export WINE_YIELD_SLEEP_US
