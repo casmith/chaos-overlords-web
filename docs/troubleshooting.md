@@ -406,11 +406,10 @@ docker exec chaos1 sh -c 'tr "\0" "\n" < /proc/$(pgrep -f selkies | head -1)/cmd
   | grep -E 'encoder|fullcolor'
 ```
 
-Expect `--encoder=h264enc` and `--video-fullcolor=false`, which is the only
-combination that has worked in every browser. `VIDEO_ENCODER=jpeg` needs no
-decoder at all and sidesteps the problem, but Selkies starts JPEG at quality 40
-and only reaches 90 once a region has been still for a moment, so it is visibly
-blocky in play — raise `SELKIES_JPEG_QUALITY` before using it. See
+Expect `--encoder=jpeg`, which needs no video decoder at all and so cannot fail
+this way. If someone has set `VIDEO_ENCODER=h264enc` **and**
+`VIDEO_FULLCOLOR=true`, that combination is what breaks these browsers; either
+switch back to jpeg or set fullcolor false. See
 [video-findings.md](video-findings.md).
 
 ## Small details on the map look wrong or missing
@@ -421,11 +420,18 @@ turn", and a red rather than green middle means enemy gangs are detected — and
 H.264's usual 4:2:0 chroma averages colour over 2x2 pixel blocks, which erases
 exactly that.
 
-This is a known open problem, not a misconfiguration. H.264's 4:2:0 chroma
-averages colour over 2x2 pixel blocks, which is what erases them. The two fixes
-tried so far both made things worse overall — 4:4:4 breaks Firefox and Brave,
-and the JPEG encoder is blocky in motion at its default quality of 40. See
-[video-findings.md](video-findings.md) for what a working fix has to clear.
+Check the encoder and its quality — both matter, and the quality is the one
+that gets forgotten:
+
+```bash
+docker exec chaos1 sh -c 'tr "\0" "\n" < /proc/$(pgrep -f selkies | head -1)/cmdline' \
+  | grep -E 'encoder|jpeg'
+```
+
+Expect `--encoder=jpeg --jpeg-quality=90 --paint-over-jpeg-quality=95`. On
+`h264enc` the marks are averaged away by 4:2:0 chroma at any bitrate, and on
+`jpeg` without an explicit quality Selkies uses 40, which is blocky. See
+[video-findings.md](video-findings.md).
 
 Note the white box around the selected sector **flashes by design** — that is
 the Sector Selector, not a streaming fault. Full detail, and what the icons

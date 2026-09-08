@@ -52,25 +52,24 @@
 # URL prefix when reverse-proxied under a subpath (e.g. "/chaos1").
 : "${WEB_SUBFOLDER:=}"
 
-# Video: the game is 2D and mostly static, so 30 fps and a modest bitrate are
-# ample (SPEC sections 35 and 37). h264enc | h264enc-striped | jpeg.
+# Video: the game is 2D and mostly static, so 30 fps is ample (SPEC sections 35
+# and 37). h264enc | h264enc-striped | jpeg.
 #
-# h264enc, which is where this started and where it has returned to twice.
-# The two alternatives both looked better on a measurement and were worse in
-# a player's hands:
+# jpeg, because the game says things in marks two pixels across -- the red ticks
+# on a sector's gang circle mean "hired this turn" -- and H.264's 4:2:0 chroma
+# stores one colour sample per 2x2 block, which averages them away at any
+# bitrate. JPEG has no chroma subsampling to lose them to, and needs no video
+# decoder in the browser at all, which the 4:4:4 H.264 alternative does: Firefox
+# and Brave have no such decoder and refuse the session outright.
 #
-#   h264enc + 4:4:4 chroma  sharper, and Firefox and Brave refuse the session
-#                           outright -- they have no 4:4:4 decoder and do not
-#                           fall back. See docs/video-findings.md.
-#   jpeg                    needs no decoder at all and measured sharpest, but
-#                           Selkies' jpeg_quality starts at 40 and only reaches
-#                           the paint-over quality (90) once a screen has been
-#                           still for a moment. Everything in motion is a
-#                           quality-40 JPEG, which is visibly blocky.
-#
-# Anything changed here has to be looked at in Chrome AND Firefox, in motion
-# and at rest, before it ships.
-: "${VIDEO_ENCODER:=h264enc}"
+# JPEG_QUALITY is not optional. Selkies starts JPEG at 40 and only reaches its
+# paint-over quality once a region has been still for a moment -- and the
+# selected sector's box blinks, so the area around a gang marker never settles
+# and never gets the paint-over. Shipping the encoder without this number was
+# visibly blocky in play. See docs/video-findings.md.
+: "${VIDEO_ENCODER:=jpeg}"
+: "${JPEG_QUALITY:=90}"
+: "${JPEG_PAINT_OVER_QUALITY:=95}"
 : "${VIDEO_FPS:=30}"
 : "${VIDEO_BITRATE:=2000}"
 # 4:4:4 chroma, and OFF, because turning it on breaks whole browsers.
@@ -142,6 +141,7 @@ export DISPLAY DISPLAY_WIDTH DISPLAY_HEIGHT DISPLAY_DEPTH
 export ENABLE_AUDIO PULSE_SINK_NAME PULSE_RUNTIME_PATH PULSE_SERVER
 export ENABLE_SELKIES WEB_PORT ENABLE_HTTPS WEB_USER WEB_PASSWORD WEB_SUBFOLDER
 export VIDEO_ENCODER VIDEO_FPS VIDEO_BITRATE VIDEO_FULLCOLOR AUDIO_BITRATE
+export JPEG_QUALITY JPEG_PAINT_OVER_QUALITY
 export ENABLE_VNC VNC_PORT
 export DEBUG GAME_RESTART_DELAY GAME_MAX_RESTARTS APP_USER APP_GROUP TZ
 export WINE_YIELD_SLEEP_US

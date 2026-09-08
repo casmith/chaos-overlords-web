@@ -37,7 +37,11 @@ services:
       # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
       WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-jpeg}
+      # Not optional with the jpeg encoder; Selkies' own default is 40 and
+      # that is what anything moving gets. See docs/video-findings.md.
+      JPEG_QUALITY: ${JPEG_QUALITY:-90}
+      JPEG_PAINT_OVER_QUALITY: ${JPEG_PAINT_OVER_QUALITY:-95}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
       # 4:4:4 chroma. Off: it breaks Firefox and Brave outright, and only the
@@ -83,7 +87,11 @@ services:
       # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
       WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-jpeg}
+      # Not optional with the jpeg encoder; Selkies' own default is 40 and
+      # that is what anything moving gets. See docs/video-findings.md.
+      JPEG_QUALITY: ${JPEG_QUALITY:-90}
+      JPEG_PAINT_OVER_QUALITY: ${JPEG_PAINT_OVER_QUALITY:-95}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
       # 4:4:4 chroma. Off: it breaks Firefox and Brave outright, and only the

@@ -35,6 +35,12 @@ args=(
     # the JPEG encoder. See docs/video-findings.md.
     --video-fullcolor="${VIDEO_FULLCOLOR}"
 
+    # Passed rather than left to Selkies' own defaults, which are 40 and 90.
+    # 40 is what every moving region gets, and the blinking sector selector
+    # means the area around a gang marker is always moving.
+    --jpeg-quality="${JPEG_QUALITY}"
+    --paint-over-jpeg-quality="${JPEG_PAINT_OVER_QUALITY}"
+
     # Out of scope for this project, and less attack surface for a service
     # fronting emulated 1990s software (SPEC sections 3 and 31).
     --command-enabled=false

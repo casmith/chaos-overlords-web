@@ -110,22 +110,51 @@ measurement above was taken on a static board, so every one of them measured
 the paint-over and none of them measured playing the game. A metric taken at
 rest cannot see an artefact that only exists in motion.
 
-### Back to h264enc
+### What shipped: JPEG at quality 90
 
-`VIDEO_ENCODER` is `h264enc` again, `VIDEO_FULLCOLOR` is `false`. That is the
-configuration this project started with, and the only one so far that has
-worked in every browser without looking bad.
+The artefacts were the default, not the encoder. `jpeg_quality` starts at 40 and
+that is what anything **moving** gets; 90 is only the paint-over a region
+settles to. And the selected sector's box **blinks**, so the area around a gang
+marker never settles and never gets the paint-over — the one part of the screen
+that had to look right was the one part guaranteed to stay at quality 40.
 
-The original complaint — that a sector's gang circle and its red "hired this
-turn" ticks are hard to make out — is **not fixed**, and neither attempt at
-fixing it survived contact with real use. What any future attempt has to do
-before it ships:
+So the encoder is `jpeg` with the quality passed explicitly rather than left to
+Selkies:
 
-- open it in **Chrome and Firefox**, not one of them;
-- look at it **in motion**, not on a settled screen;
-- look at it at the **upscale a player actually uses** — a 640x480 stream on a
-  1440p monitor is a 3x blow-up, and small marks fail there long before they
-  fail in a 1084-pixel-wide test window.
+```
+--encoder=jpeg --jpeg-quality=90 --paint-over-jpeg-quality=95
+```
+
+Confirmed on a player's own screen, in Firefox and Brave, in play, before it
+became the default. Verified on the wire too, since no endpoint reports the
+resolved value: at quality 5 the stream is 0.64 Mbit/s and at 95 it is 3.40,
+so the setting genuinely reaches the encoder.
+
+### The cost: bandwidth, and it is not small
+
+| | idle board | intro cinematic | CPU with a client |
+|---|---|---|---|
+| h264enc 4:2:0 | 0.18 Mbit/s | 1.12 Mbit/s | 13.0% |
+| **jpeg q90/95** | **3.68 Mbit/s** | 2.32 Mbit/s | 11.0% |
+
+An idle board costs **twenty times** more than H.264, and more than the intro
+cinematic does. That is not a mistake in the table: it is the blinking sector
+selector. Every blink re-sends those tiles at quality 90, thirty times a second,
+where H.264 codes a small periodic change almost for free. On the title screen,
+where nothing blinks, JPEG costs 0.21 Mbit/s — the same as H.264.
+
+Lowering the capture rate helps less than you would hope, because the cost is
+per blink rather than per frame:
+
+| `VIDEO_FPS` | 30 | 15 | 10 | 5 |
+|---|---|---|---|---|
+| idle board | 3.68 | 2.81 | 2.81 | 1.82 Mbit/s |
+
+**Budget about 3.7 Mbit/s of upstream per live session.** At `MAX_SESSIONS=6`
+that is roughly 22 Mbit/s, which is worth checking against a home uplink before
+a games night. `JPEG_QUALITY` is the lever if it needs to come down — but lower
+it by looking at the game, not at this table, because the whole reason this
+setting exists is that the numbers did not predict what a player saw.
 
 ## Things that were ruled out along the way
 
@@ -150,13 +179,14 @@ before it ships:
 
 ## Tuning
 
-`VIDEO_ENCODER`, default `jpeg`. `h264enc` and `h264enc-striped` are the
-alternatives; they need a working H.264 decoder in every player's browser and
-buy nothing here.
+`VIDEO_ENCODER`, default `jpeg`, with `JPEG_QUALITY` (90) and
+`JPEG_PAINT_OVER_QUALITY` (95). `h264enc` and `h264enc-striped` are the
+alternatives: far cheaper on an idle board (0.18 against 3.68 Mbit/s) and unable
+to carry the game's small coloured marks.
 
 `VIDEO_FULLCOLOR`, default `false`, H.264 only. Do not turn it on unless every
 player is on Chrome — see above.
 
-If the picture still looks soft, the next lever is `SELKIES_JPEG_QUALITY`
-(and `SELKIES_PAINT_OVER_JPEG_QUALITY`, which is what a static screen settles
-to).
+If the picture still looks soft, `JPEG_QUALITY` is the lever; if the bandwidth
+above is too much for the uplink, it is the same lever in the other direction.
+Judge either by looking at the game in a browser, not by a number.
