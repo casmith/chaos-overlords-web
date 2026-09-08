@@ -55,13 +55,22 @@
 # Video: the game is 2D and mostly static, so 30 fps and a modest bitrate are
 # ample (SPEC sections 35 and 37). h264enc | h264enc-striped | jpeg.
 #
-# jpeg, not H.264, because this is pixel art in a 640x480 window and JPEG needs
-# no video decoder in the browser at all. Measured against the container's own
-# framebuffer it is sharper than H.264 4:2:0 (full-screen RMSE 0.0376 against
-# 0.0498), costs less CPU on a static screen (8.0% against 13.0%), and sends
-# the same bandwidth even through the intro cinematic (1.15 against 1.17
-# Mbit/s). See docs/video-findings.md.
-: "${VIDEO_ENCODER:=jpeg}"
+# h264enc, which is where this started and where it has returned to twice.
+# The two alternatives both looked better on a measurement and were worse in
+# a player's hands:
+#
+#   h264enc + 4:4:4 chroma  sharper, and Firefox and Brave refuse the session
+#                           outright -- they have no 4:4:4 decoder and do not
+#                           fall back. See docs/video-findings.md.
+#   jpeg                    needs no decoder at all and measured sharpest, but
+#                           Selkies' jpeg_quality starts at 40 and only reaches
+#                           the paint-over quality (90) once a screen has been
+#                           still for a moment. Everything in motion is a
+#                           quality-40 JPEG, which is visibly blocky.
+#
+# Anything changed here has to be looked at in Chrome AND Firefox, in motion
+# and at rest, before it ships.
+: "${VIDEO_ENCODER:=h264enc}"
 : "${VIDEO_FPS:=30}"
 : "${VIDEO_BITRATE:=2000}"
 # 4:4:4 chroma, and OFF, because turning it on breaks whole browsers.

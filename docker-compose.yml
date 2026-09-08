@@ -37,7 +37,7 @@ services:
       # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
       WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      VIDEO_ENCODER: ${VIDEO_ENCODER:-jpeg}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
       # 4:4:4 chroma. Off: it breaks Firefox and Brave outright, and only the
@@ -83,7 +83,7 @@ services:
       # Sleep instead of spinning the message loop; see docs/cpu-findings.md.
       WINE_YIELD_SLEEP_US: ${WINE_YIELD_SLEEP_US:-500}
       ENABLE_AUDIO: ${ENABLE_AUDIO:-true}
-      VIDEO_ENCODER: ${VIDEO_ENCODER:-jpeg}
+      VIDEO_ENCODER: ${VIDEO_ENCODER:-h264enc}
       VIDEO_FPS: ${VIDEO_FPS:-30}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-2000}
       # 4:4:4 chroma. Off: it breaks Firefox and Brave outright, and only the

@@ -82,33 +82,50 @@ Chrome. The lesson is the narrow one: **a change to the wire format has to be
 tested in more than one browser**, because the one you automate is the one with
 the best codec support.
 
-### The right fix: stop needing a video decoder
+### The second wrong fix: the JPEG encoder
 
-The `jpeg` encoder has no chroma subsampling to lose the marks to, and needs no
-H.264 decoder in the browser at all. Measured against the container's own
-framebuffer (`xwd`) as ground truth:
+JPEG needs no H.264 decoder in the browser at all, so it cannot fail the way
+4:4:4 does, and it has no chroma subsampling to lose the marks to. Measured on
+a **settled** screen it was the best of the three:
 
-| | full screen | the marker | CPU, static screen | intro cinematic |
+| | full screen | the marker | CPU idle | intro cinematic |
 |---|---|---|---|---|
 | h264enc 4:2:0 | 0.0498 | 0.0921 | 13.0% | 1.17 Mbit/s |
 | h264enc 4:4:4 | 0.0386 | 0.0637 | 14.2% | — |
-| **jpeg** | **0.0376** | **0.0465** | **8.0%** | **1.15 Mbit/s** |
+| jpeg | 0.0376 | 0.0465 | 8.0% | 1.15 Mbit/s |
 
-(RMSE, lower is closer.)
+(RMSE, lower is closer.) It shipped, and it looked awful in play — blocky and
+artefacted in a way none of those numbers predict.
 
-So JPEG is sharper than 4:4:4 H.264, costs a third less CPU than 4:2:0, sends
-the same bandwidth even through the intro cinematic, and works in every browser.
-The bandwidth is the surprise — the reason it holds up is that this is a 640x480
-window where almost nothing changes, and Selkies only sends the tiles that did.
-It renders on a canvas with `image-rendering: crisp-edges`, where the H.264 path
-uses a `<video>` element the browser is free to smooth.
+The reason is in Selkies' defaults:
 
-Verified in a real Firefox, driven on an Xvfb display rather than through an
-automation API: the gang marker and its ring are there, and slightly cleaner
-than the same session on H.264.
+```python
+{"name": "jpeg_quality",            "meta": {"default_value": 40}}
+{"name": "paint_over_jpeg_quality", "meta": {"default_value": 90}}
+```
 
-`VIDEO_FULLCOLOR` remains available and defaults to **false**. It only affects
-the H.264 encoders. Turn it on only if every player is on Chrome.
+**Quality 40 is what you get while anything is moving.** Quality 90 is the
+"paint-over" a region settles to once it has been still for a moment. Every
+measurement above was taken on a static board, so every one of them measured
+the paint-over and none of them measured playing the game. A metric taken at
+rest cannot see an artefact that only exists in motion.
+
+### Back to h264enc
+
+`VIDEO_ENCODER` is `h264enc` again, `VIDEO_FULLCOLOR` is `false`. That is the
+configuration this project started with, and the only one so far that has
+worked in every browser without looking bad.
+
+The original complaint — that a sector's gang circle and its red "hired this
+turn" ticks are hard to make out — is **not fixed**, and neither attempt at
+fixing it survived contact with real use. What any future attempt has to do
+before it ships:
+
+- open it in **Chrome and Firefox**, not one of them;
+- look at it **in motion**, not on a settled screen;
+- look at it at the **upscale a player actually uses** — a 640x480 stream on a
+  1440p monitor is a 3x blow-up, and small marks fail there long before they
+  fail in a 1084-pixel-wide test window.
 
 ## Things that were ruled out along the way
 
