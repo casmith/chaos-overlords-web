@@ -110,51 +110,82 @@ measurement above was taken on a static board, so every one of them measured
 the paint-over and none of them measured playing the game. A metric taken at
 rest cannot see an artefact that only exists in motion.
 
-### What shipped: JPEG at quality 90
+### The third wrong fix: JPEG at quality 90
 
-The artefacts were the default, not the encoder. `jpeg_quality` starts at 40 and
-that is what anything **moving** gets; 90 is only the paint-over a region
-settles to. And the selected sector's box **blinks**, so the area around a gang
-marker never settles and never gets the paint-over — the one part of the screen
-that had to look right was the one part guaranteed to stay at quality 40.
+Quality 90 fixed the artefacts (Selkies' default is 40, which is what any
+*moving* region gets, and the blinking sector selector means the area around a
+gang marker never settles enough to earn the paint-over). It shipped, and a
+remote player reported audio stuttering.
 
-So the encoder is `jpeg` with the quality passed explicitly rather than left to
-Selkies:
+Audio and video share one WebSocket, so a video backlog stalls the audio behind
+it. Measured on an idle board over a shaped 5 Mbit link, with sound playing:
 
-```
---encoder=jpeg --jpeg-quality=90 --paint-over-jpeg-quality=95
-```
-
-Confirmed on a player's own screen, in Firefox and Brave, in play, before it
-became the default. Verified on the wire too, since no endpoint reports the
-resolved value: at quality 5 the stream is 0.64 Mbit/s and at 95 it is 3.40,
-so the setting genuinely reaches the encoder.
-
-### The cost: bandwidth, and it is not small
-
-| | idle board | intro cinematic | CPU with a client |
+| | audio gap p95 | worst gap | gaps >100 ms |
 |---|---|---|---|
-| h264enc 4:2:0 | 0.18 Mbit/s | 1.12 Mbit/s | 13.0% |
-| **jpeg q90/95** | **3.68 Mbit/s** | 2.32 Mbit/s | 11.0% |
+| h264enc | 10 ms | 78 ms | 0 |
+| jpeg q90 | 40 ms | **307 ms** | 2 |
 
-An idle board costs **twenty times** more than H.264, and more than the intro
-cinematic does. That is not a mistake in the table: it is the blinking sector
-selector. Every blink re-sends those tiles at quality 90, thirty times a second,
-where H.264 codes a small periodic change almost for free. On the title screen,
-where nothing blinks, JPEG costs 0.21 Mbit/s — the same as H.264.
+On localhost both are clean, which is why it was not caught: every earlier test
+ran over a link with no constraint. **A media change has to be tested on a
+constrained link, not just a fast one.**
 
-Lowering the capture rate helps less than you would hope, because the cost is
-per blink rather than per frame:
+### Why JPEG is so expensive here, and why it cannot be tuned down
 
-| `VIDEO_FPS` | 30 | 15 | 10 | 5 |
-|---|---|---|---|---|
-| idle board | 3.68 | 2.81 | 2.81 | 1.82 Mbit/s |
+On an idle board only **200–700 pixels change per frame**, and the stream still
+sends ~300 KB/s. Profiling the wire: 255 video frames in 15 s (~17/s), each
+**16–64 KB**, and 100% of the bytes. A full 640x480 board as one JPEG is 169 KB
+at q90, so these are not full frames — they are pixelflux's **full-width
+horizontal stripes covering every damaged row**. This game blinks a "WAIT"
+indicator at y 26–43 and a sector selector lower down, so the dirty band spans
+y 26–196, about a third of the screen, and 640x170 at q90 is ≈59 KB. That is
+exactly the frame size on the wire.
 
-**Budget about 3.7 Mbit/s of upstream per live session.** At `MAX_SESSIONS=6`
-that is roughly 22 Mbit/s, which is worth checking against a home uplink before
-a games night. `JPEG_QUALITY` is the lever if it needs to come down — but lower
-it by looking at the game, not at this table, because the whole reason this
-setting exists is that the numbers did not predict what a player saw.
+A blinking 18x18 cursor therefore costs a third of the screen, because stripes
+are full width.
+
+The knobs that should help are hardcoded in Selkies and make no difference:
+
+```python
+cs.paint_over_trigger_frames = 15
+cs.damage_block_threshold = 10
+cs.damage_block_duration = 20
+```
+
+Patched live to 500 / 1 and remeasured: 3.66 against 3.63 Mbit/s. Capture-side
+scaling — which would be the elegant fix, upscaling 2x before encoding so 4:2:0
+chroma cannot erase a two-pixel mark — is `self.scale = 1.0`, hardcoded in
+`media_pipeline.py` and not a setting.
+
+That leaves quality and frame rate, both linear and neither close:
+
+| idle board | Mbit/s |
+|---|---|
+| h264enc | **0.16** |
+| jpeg q90 @ 30 fps | 3.63 |
+| jpeg q60 @ 30 fps | 1.28 |
+| jpeg q90 @ 5 fps | 1.82 |
+
+So JPEG cannot be made cheap in this build. The default is `h264enc`.
+
+### What is still broken
+
+Being precise, because "sharp markers" was too loose a phrase and hid this:
+
+- On **Chrome**, h264 shows the gang circle; what it loses is the fine detail —
+  the red ring ticks that mean "hired this turn", and the crispness of the
+  circle's edge. That is the 4:2:0 chroma loss, and it is what the measurements
+  in this document are about.
+- On **Brave**, the operator reports the markers do not appear **at all** on
+  h264, which is a different and worse failure than chroma loss.
+- On **Firefox**, the operator reports h264 does not work at all.
+
+Neither of those last two has been reproduced here: a real Firefox on an Xvfb
+display, on h264 4:2:0, rendered the board and the marker correctly. So
+something in the real deployment differs from that test — the likely suspects
+are the path through nginx and the Cloudflare tunnel (every local test went
+straight to the container), the browsers' own decoder configuration, and Brave's
+shields. **That is the open thread, and it is a browser/transport problem rather
+than an encoder-quality one.**
 
 ## Things that were ruled out along the way
 

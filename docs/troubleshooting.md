@@ -406,11 +406,16 @@ docker exec chaos1 sh -c 'tr "\0" "\n" < /proc/$(pgrep -f selkies | head -1)/cmd
   | grep -E 'encoder|fullcolor'
 ```
 
-Expect `--encoder=jpeg`, which needs no video decoder at all and so cannot fail
-this way. If someone has set `VIDEO_ENCODER=h264enc` **and**
-`VIDEO_FULLCOLOR=true`, that combination is what breaks these browsers; either
-switch back to jpeg or set fullcolor false. See
-[video-findings.md](video-findings.md).
+First check `--video-fullcolor=false`: with it true, Firefox and Brave refuse
+the session outright, because they have no H.264 4:4:4 decoder and do not fall
+back. That is the one confirmed cause.
+
+Beyond that there is an **open, unreproduced** report of h264 failing on Brave
+and Firefox in a real deployment while working in local tests. If you hit it,
+the useful things to capture are the browser console, and whether it also
+happens when you reach the session directly rather than through nginx and the
+tunnel. `VIDEO_ENCODER=jpeg` needs no video decoder at all and is the workaround,
+at a large bandwidth cost — see [video-findings.md](video-findings.md).
 
 ## Small details on the map look wrong or missing
 

@@ -55,19 +55,26 @@
 # Video: the game is 2D and mostly static, so 30 fps is ample (SPEC sections 35
 # and 37). h264enc | h264enc-striped | jpeg.
 #
-# jpeg, because the game says things in marks two pixels across -- the red ticks
-# on a sector's gang circle mean "hired this turn" -- and H.264's 4:2:0 chroma
-# stores one colour sample per 2x2 block, which averages them away at any
-# bitrate. JPEG has no chroma subsampling to lose them to, and needs no video
-# decoder in the browser at all, which the 4:4:4 H.264 alternative does: Firefox
-# and Brave have no such decoder and refuse the session outright.
+# h264enc, because jpeg costs 3.6 Mbit/s on an idle board against h264's 0.16 --
+# roughly twenty times -- and audio shares the same WebSocket, so on a limited
+# uplink the video backlog stalls the audio. Measured over a 5 Mbit link on an
+# idle board: h264 p95 audio gap 10 ms, worst 78 ms; jpeg p95 40 ms, worst
+# 307 ms. That is audible.
 #
-# JPEG_QUALITY is not optional. Selkies starts JPEG at 40 and only reaches its
-# paint-over quality once a region has been still for a moment -- and the
-# selected sector's box blinks, so the area around a gang marker never settles
-# and never gets the paint-over. Shipping the encoder without this number was
-# visibly blocky in play. See docs/video-findings.md.
-: "${VIDEO_ENCODER:=jpeg}"
+# The cost is pixelflux's stripe geometry: it re-encodes full-width horizontal
+# stripes covering every damaged row, and this game has a blinking "WAIT"
+# indicator near the top and a blinking sector selector lower down, so a band
+# spanning about a third of the screen is re-sent ~17 times a second for the
+# sake of a few hundred changed pixels. Selkies' damage knobs
+# (damage_block_threshold/duration, paint_over_trigger_frames) are hardcoded
+# and make no measurable difference -- patched live to 500/1, bandwidth was
+# unchanged -- and capture-side scaling is hardcoded to 1.0. Only quality and
+# frame rate remain, and both are linear: q60 is still 1.28 Mbit/s.
+#
+# JPEG_QUALITY below only applies if someone sets VIDEO_ENCODER=jpeg. It is
+# kept because Selkies' own default is 40, which is visibly blocky in motion.
+# See docs/video-findings.md.
+: "${VIDEO_ENCODER:=h264enc}"
 : "${JPEG_QUALITY:=90}"
 : "${JPEG_PAINT_OVER_QUALITY:=95}"
 : "${VIDEO_FPS:=30}"
