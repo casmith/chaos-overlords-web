@@ -205,6 +205,16 @@ COPY rootfs/ /
 COPY scripts/ /opt/chaos/scripts/
 COPY config/ /opt/chaos/config/
 
+# Pin the stream to the left of the window rather than centring it. Selkies has
+# no setting for this and no stylesheet hook, so the rule is inlined into its
+# page; the page is copied to a temp dir at start-up, so patching the packaged
+# copy is enough. See config/selkies/chaos-ui.css.
+RUN set -eux; \
+    python3 /opt/chaos/scripts/patch-selkies-ui.py \
+        "/usr/local/lib/${SELKIES_PYTHON}/dist-packages/selkies/selkies_web/index.html" \
+        /opt/chaos/config/selkies/chaos-ui.css; \
+    grep -q chaos-ui-css "/usr/local/lib/${SELKIES_PYTHON}/dist-packages/selkies/selkies_web/index.html"
+
 RUN set -eux; \
     chmod +x /opt/chaos/scripts/*.sh /usr/local/bin/chaos-*; \
     ln -sf /opt/chaos/scripts/healthcheck.sh /usr/local/bin/healthcheck.sh; \

@@ -1,0 +1,29 @@
+/* Pin the stream to the left edge instead of centring it.
+ *
+ * Selkies centres the picture in the window: #video-container is a flex box
+ * with justify-content:center, and the client writes an inline
+ * "left: <half the slack>px" onto the stream element on every resize. On a
+ * wide window that leaves the 640x480 game floating in the middle with a band
+ * of dead space either side, so the window has to be full-screen before the
+ * game is a comfortable size.
+ *
+ * The inline left has no !important, so an author rule with !important wins
+ * and keeps winning across the client's resize handler.
+ *
+ * Both elements have to move together. #overlayInput is the transparent input
+ * that receives the mouse, and the client maps a click to game coordinates
+ * from that element's own bounding rect -- move the picture without it and
+ * every click lands somewhere else.
+ */
+#videoStream,
+#videoCanvas,
+#videoWorkerCanvas,
+#overlayInput {
+    left: 0 !important;
+}
+
+/* The flex centring would otherwise fight the rule above for any child that
+ * is not absolutely positioned. */
+#video-container {
+    justify-content: flex-start !important;
+}

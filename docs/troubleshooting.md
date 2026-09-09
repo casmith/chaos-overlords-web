@@ -417,6 +417,22 @@ happens when you reach the session directly rather than through nginx and the
 tunnel. `VIDEO_ENCODER=jpeg` needs no video decoder at all and is the workaround,
 at a large bandwidth cost — see [video-findings.md](video-findings.md).
 
+## The picture sits in the middle of the window
+
+It should be flush against the left edge. Selkies centres it, and this image
+inlines a stylesheet into Selkies' page to pin it left instead — see
+`config/selkies/chaos-ui.css`. Check the patch is in the image:
+
+```bash
+docker exec chaos1 grep -c chaos-ui-css \
+  /usr/local/lib/python3.13/dist-packages/selkies/selkies_web/index.html
+```
+
+Expect `1`. To go back to centred, drop that stylesheet and rebuild. Note the
+rule has to move `#overlayInput` along with the picture: that transparent input
+is what receives the mouse, and the client maps clicks from its bounding rect,
+so moving one without the other puts every click in the wrong place.
+
 ## The grid letters, the site flag or the gang circles are missing
 
 All of them at once, while the map tiles, grid lines and panels draw fine? That
