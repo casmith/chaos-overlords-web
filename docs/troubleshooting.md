@@ -417,6 +417,28 @@ happens when you reach the session directly rather than through nginx and the
 tunnel. `VIDEO_ENCODER=jpeg` needs no video decoder at all and is the workaround,
 at a large bandwidth cost — see [video-findings.md](video-findings.md).
 
+## The grid letters, the site flag or the gang circles are missing
+
+All of them at once, while the map tiles, grid lines and panels draw fine? That
+is the intro cinematic: clicking through it leaves the game unable to draw any
+masked sprite on the map for the rest of that process. The game state is fine --
+**Gangs In Sector** will list gangs the map shows nothing for.
+
+`GAME_INTRO` defaults to `false`, which keeps the films out of the prefix so the
+game never plays one. Check it took:
+
+```bash
+docker logs chaos1 2>&1 | grep -i intro          # "Intro skipped: 2 film(s) left out of DATA"
+docker exec chaos1 ls /config/wine/drive_c/games/Chaos/DATA | grep -c MV   # expect 0
+```
+
+An existing session created before this shipped keeps its old prefix layout
+until it is recreated -- Stop it and open it again. To recover a session that is
+already in the broken state without losing the container, restart just the game:
+`docker exec <container> pkill -f 'Chaos Overlords'` and it relaunches.
+
+Full detail in [intro-findings.md](intro-findings.md).
+
 ## Small details on the map look wrong or missing
 
 Most often: the little circle in a sector that says gangs are there. Its state

@@ -337,6 +337,7 @@ attack surface in front of emulated 1990s software.
 - [Phase 2 findings](docs/phase-2-findings.md) — Selkies packaging, and what was verified
 - [Audio findings](docs/audio-findings.md) — why volume and music behave as they do
 - [CPU findings](docs/cpu-findings.md) — why a session used a whole core, and the shim that fixed it
+- [Intro findings](docs/intro-findings.md) — why clicking past the intro breaks every map sprite
 - [Video findings](docs/video-findings.md) — why small map markers did not survive the stream
 - [Multiplayer findings](docs/multiplayer-findings.md) — the protocol, the port, and the Wine dialog bug
 - [Architecture](docs/architecture.md) — process tree, startup, filesystem layout

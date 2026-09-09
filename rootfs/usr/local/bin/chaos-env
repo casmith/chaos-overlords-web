@@ -23,6 +23,15 @@
 # mounted game files are never touched.
 : "${PATCH_DIALOG_VISIBILITY:=true}"
 
+# Play the intro cinematic. Off, because clicking through it -- which is what
+# anyone does on their second session -- leaves the game unable to draw any
+# masked sprite on the city map for the rest of that process: the grid letters,
+# the site flag and the gang circles all vanish while everything else still
+# renders. The films are simply not linked into the prefix, so the game goes
+# straight to its title screen and starts in about 30 seconds instead of 150.
+# See docs/intro-findings.md.
+: "${GAME_INTRO:=false}"
+
 # --- Display -----------------------------------------------------------------
 : "${DISPLAY:=:0}"
 : "${DISPLAY_WIDTH:=640}"
@@ -143,7 +152,7 @@ fi
 
 export CONFIG_DIR GAME_DIR GAME_WIN_DIR GAME_UNIX_DIR
 export WINEPREFIX WINEARCH WINE_WINDOWS_VERSION WINE_VIRTUAL_DESKTOP
-export PATCH_DIALOG_VISIBILITY
+export PATCH_DIALOG_VISIBILITY GAME_INTRO
 export DISPLAY DISPLAY_WIDTH DISPLAY_HEIGHT DISPLAY_DEPTH
 export ENABLE_AUDIO PULSE_SINK_NAME PULSE_RUNTIME_PATH PULSE_SERVER
 export ENABLE_SELKIES WEB_PORT ENABLE_HTTPS WEB_USER WEB_PASSWORD WEB_SUBFOLDER

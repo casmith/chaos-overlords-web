@@ -104,6 +104,51 @@ for entry in "${GAME_DIR}"/*; do
 done
 chaos_log wine "${linked} game entries available at ${GAME_WIN_DIR}"
 
+# --- Keep the intro cinematic out of the way --------------------------------
+# Clicking through the intro leaves the game unable to draw any masked sprite
+# on the city map for the rest of that process: the sector grid letters, the
+# site flag and the gang circles all silently stop being drawn, while the map
+# tiles, the grid lines and every panel still render. The game state is fine --
+# Gangs In Sector lists gangs the map shows nothing for -- so it reads as
+# "the icons are broken" rather than "the video ended badly".
+#
+# Reproduced by starting the same game twice: letting the intro finish gives
+# 548 green pixels in the label strip and the gang rings on the map; clicking
+# through it gives 0 and 0. Restarting the game process restores them, so it is
+# state inside the process rather than anything on disk. Nobody watches a
+# 137-second cinematic every time they open a session, so everybody hits this.
+#
+# The game has no no-intro switch, so take the films away: DATA becomes a real
+# directory of links with MVINTRO and MVLOGOS left out, and the game goes
+# straight to its title screen. That also cuts session start from about 150
+# seconds to 30. Set GAME_INTRO=true to link them back and watch it.
+data_dir="${GAME_UNIX_DIR}/DATA"
+if [ "${GAME_INTRO}" = "true" ]; then
+    if [ -d "${data_dir}" ] && [ ! -L "${data_dir}" ]; then
+        rm -rf "${data_dir}"
+        ln -sfn "${GAME_DIR}/DATA" "${data_dir}"
+        chaos_log wine "Intro enabled: DATA linked whole"
+    fi
+elif [ -d "${GAME_DIR}/DATA" ]; then
+    # Replace the single DATA symlink with a directory of per-entry links.
+    [ -L "${data_dir}" ] && rm -f "${data_dir}"
+    mkdir -p "${data_dir}"
+    skipped=0
+    for entry in "${GAME_DIR}"/DATA/*; do
+        [ -e "${entry}" ] || continue
+        name="$(basename "${entry}")"
+        case "${name}" in
+            MVINTRO|MVLOGOS|mvintro|mvlogos) skipped=$((skipped + 1)); continue ;;
+        esac
+        ln -sfn "${entry}" "${data_dir}/${name}"
+    done
+    # A previous run with GAME_INTRO=true may have left the films linked.
+    for name in MVINTRO MVLOGOS mvintro mvlogos; do
+        [ -L "${data_dir}/${name}" ] && rm -f "${data_dir}/${name}"
+    done
+    chaos_log wine "Intro skipped: ${skipped} film(s) left out of DATA (GAME_INTRO=true to keep them)"
+fi
+
 # --- Make the game's modal dialogs visible under Wine -----------------------
 # Wine's user32 shows a DialogBoxParam dialog only when the template already
 # carries WS_VISIBLE (dlls/user32/dialog.c). Three of this game's templates do
