@@ -69,6 +69,23 @@ class Session:
     # session because it is baked into the container's environment, so a
     # running container must keep the value it was started with.
     subfolder: str = ""
+    # Seconds anyone has actually been watching, accumulated. Counted from the
+    # proxied WebSockets rather than from how long the container has existed:
+    # a session left running overnight with nobody in it is not playtime, and a
+    # stopped session that gets resumed keeps what it has already earned.
+    #
+    # `played_since` is when the current stretch began, or 0.0 when nobody is
+    # connected. It is folded into `played_seconds` when the last viewer leaves,
+    # so the pair is the running total plus an open interval.
+    played_seconds: float = 0.0
+    played_since: float = 0.0
+
+    @property
+    def playtime(self) -> float:
+        """Total watched seconds, including any stretch still in progress."""
+        if self.played_since:
+            return self.played_seconds + max(0.0, time.time() - self.played_since)
+        return self.played_seconds
 
     @property
     def container_name(self) -> str:
@@ -89,6 +106,7 @@ class Session:
         d = asdict(self)
         d["path"] = self.path
         d["idle_seconds"] = int(time.time() - self.last_seen) if not self.active_conns else 0
+        d["playtime_seconds"] = int(self.playtime)
         return d
 
 
@@ -118,6 +136,10 @@ class SessionManager:
             return
         for d in raw.get("sessions", []):
             d.pop("active_conns", None)          # never meaningful across a restart
+            # An open playtime stretch cannot survive a restart either -- we do
+            # not know when the manager stopped. The reaper banks the total
+            # every tick, so what is dropped here is at most one tick.
+            d["played_since"] = 0.0
             try:
                 self.sessions[d["id"]] = Session(**d, active_conns=0)
             except TypeError as exc:
@@ -329,6 +351,30 @@ class SessionManager:
                 created=created, last_seen=created, status="stopped")
             log.info("adopted save volume %s as session %s", v.name, sid)
 
+    async def set_owner(self, session: Session, owner: str) -> None:
+        """Hand a session to a player, or take it back to nobody.
+
+        The owner lives in this manager's state file. The session's save volume
+        also carries the owner it was created with, as a label, because that is
+        what rebuilds sessions when the state file is lost -- and Docker volume
+        labels cannot be changed after creation. So a reassignment recorded here
+        is not reflected there: if this manager's data volume is ever lost and
+        sessions are rebuilt from the save volumes alone, they come back with
+        the owner they were *created* with, not the one they were assigned to.
+        Worth knowing, not worth a second copy of the truth; the state file and
+        the volumes live in the same place and are lost together or not at all.
+        """
+        async with self._lock:
+            session.owner = owner
+            if not session.label:
+                session.label = owner
+            self._save()
+        log.info("session %s now belongs to %r", session.id, owner or "nobody")
+
+    def owned_by(self, owner: str) -> list[Session]:
+        """Sessions filed under a name; empty for the empty name."""
+        return [s for s in self.sessions.values() if owner and s.owner == owner]
+
     async def create(self, label: str = "", owner: str = "") -> Session:
         async with self._lock:
             if len([s for s in self.sessions.values() if s.status != "stopped"]) >= self.cfg["max_sessions"]:
@@ -424,10 +470,19 @@ class SessionManager:
         while True:
             await asyncio.sleep(self.cfg["reap_interval"])
             now = time.time()
+            dirty = False
             try:
                 for session in list(self.sessions.values()):
                     if session.active_conns > 0:
                         session.last_seen = now
+                        # Bank the playtime so far. Without this a three-hour
+                        # sitting would be lost entirely if the manager
+                        # restarted before the last viewer left; folding here
+                        # costs at most one tick.
+                        if session.played_since:
+                            session.played_seconds += max(0.0, now - session.played_since)
+                            session.played_since = now
+                            dirty = True
                         continue
                     idle = now - session.last_seen
                     if session.status in ("ready", "starting") and idle > idle_after:
@@ -437,6 +492,8 @@ class SessionManager:
                         log.info("session %s unused for %dh; removing its data",
                                  session.id, int(idle / 3600))
                         await self.delete(session)
+                if dirty:
+                    self._save()
             except Exception:                       # noqa: BLE001 - the reaper must not die
                 log.exception("reaper iteration failed")
 
@@ -446,9 +503,18 @@ class SessionManager:
         session.last_seen = time.time()
 
     def conn_opened(self, session: Session) -> None:
+        if session.active_conns == 0:
+            # First viewer in: start the clock. Two people watching the same
+            # session is still one session being played, so the count only
+            # matters for whether anybody is there at all.
+            session.played_since = time.time()
         session.active_conns += 1
         session.last_seen = time.time()
 
     def conn_closed(self, session: Session) -> None:
         session.active_conns = max(0, session.active_conns - 1)
+        if session.active_conns == 0 and session.played_since:
+            session.played_seconds += max(0.0, time.time() - session.played_since)
+            session.played_since = 0.0
+            self._save()
         session.last_seen = time.time()

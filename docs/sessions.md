@@ -206,6 +206,40 @@ which nobody owns and which anyone opening needs the share password for. A
 guest never sees the pill — every session on their page is theirs, so the
 answer would always be "you".
 
+### Handing a session over
+
+**Admins** get a *Belongs to* box on every card. Type a name and press
+**Assign**; empty it to hand the session back to nobody. The name does not have
+to exist yet — a name is claimed on first sign-in, so you can set a game up and
+file it under someone before they have ever logged in, and it is waiting when
+they claim the name.
+
+**Players** can claim an unowned session themselves, from the *Claim a session*
+box on their page, by giving its name and its share password. Once claimed,
+their own login opens it and the password is no longer needed.
+
+That password is the whole point of the gate. An owner opens their session on
+their login alone, so letting any signed-in player claim any unowned session
+would hand them a game they were never given — an unowned session is otherwise
+reachable only by someone holding its password. Requiring it means claiming can
+only turn access you already have into ownership. A session that already belongs
+to someone cannot be claimed at all; moving it takes an admin.
+
+One caveat worth knowing: a reassignment is recorded in the manager's state
+file, not on the save volume. The volume carries the owner the session was
+*created* with, as a label, and Docker volume labels cannot be changed
+afterwards. That label is only consulted to rebuild sessions when the state file
+is lost — so in that specific disaster, sessions come back under their original
+owners.
+
+### Playtime
+
+Each card shows how long the session has actually been watched, once that passes
+a minute — `idle 2m · played 1h 25m`. It counts time with at least one viewer
+connected, taken from the proxied WebSockets, so a session left running overnight
+with nobody in it earns nothing, and a stopped session keeps what it has already
+earned. The total is in the API too, as `playtime_seconds`.
+
 **The trust level is "a group of friends".** Claiming is first-come: the invite
 password opens any name nobody has taken yet, so it is worth telling players to
 sign in once early rather than on the night. Once a name is claimed it takes its

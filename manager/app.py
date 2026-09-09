@@ -327,6 +327,63 @@ async def api_set_password(request: web.Request) -> web.Response:
         headers={"WWW-Authenticate": f'Basic realm="Chaos Overlords - {name}"'})
 
 
+async def api_set_owner(request: web.Request) -> web.Response:
+    """Admin: hand a session to a player, or take it back to nobody.
+
+    Any name is allowed, claimed or not: a name is claimed on first sign-in, so
+    assigning a session to someone who has not signed in yet is exactly how you
+    set a game up for them before they arrive. Their sessions are waiting when
+    they claim the name.
+    """
+    if request.get("role") != "admin":
+        raise web.HTTPForbidden(text="Admins only.")
+    mgr: SessionManager = request.app["mgr"]
+    session = mgr.sessions.get(request.match_info["sid"])
+    if session is None:
+        raise web.HTTPNotFound(text="No such session.")
+    owner = str((await request.post()).get("owner", "")).strip()[:40]
+    if owner == request.app["cfg"]["admin_user"]:
+        # The admin signs in from the environment, not the account store, so a
+        # session filed under that name could never be opened as its owner.
+        raise web.HTTPBadRequest(text="That name belongs to the admin login.")
+    await mgr.set_owner(session, owner)
+    raise web.HTTPFound("/")
+
+
+async def api_claim_session(request: web.Request) -> web.Response:
+    """A player takes an unowned session for themselves.
+
+    Gated on the session's own share password, and that gate is the whole
+    design. An owner opens their session on their login alone, so letting any
+    signed-in player claim any unowned session would hand them a session they
+    were never given -- an unowned session is otherwise reachable only by
+    someone holding its password. Requiring that password means claiming can
+    only convert access you already have into ownership.
+    """
+    role = request.get("role")
+    who = request.get("who", "")
+    if role != "guest" or not who:
+        raise web.HTTPForbidden(text="Sign in with your own name first.")
+    import secrets as _s
+
+    mgr: SessionManager = request.app["mgr"]
+    cfg = request.app["cfg"]
+    data = await request.post()
+    sid = str(data.get("session", "")).strip()
+    session = mgr.sessions.get(sid)
+    if session is None:
+        raise web.HTTPNotFound(text="No such session.")
+    if session.owner:
+        raise web.HTTPConflict(text="That session already belongs to someone.")
+    if not _s.compare_digest(str(data.get("password", "")), session.password):
+        raise web.HTTPForbidden(text="That is not this session's password.")
+    cap = cfg["max_sessions_per_guest"]
+    if cap and len(mgr.owned_by(who)) >= cap:
+        raise web.HTTPConflict(text=f"You already hold {cap} sessions.")
+    await mgr.set_owner(session, who)
+    raise web.HTTPFound(f"/?new={session.id}")
+
+
 async def api_release_account(request: web.Request) -> web.Response:
     """Admin: release a name so a forgetful player can claim it again."""
     if request.get("role") != "admin":
@@ -489,6 +546,8 @@ def build_app() -> web.Application:
     app.router.add_post("/api/sessions/{sid}/stop", api_stop)
     app.router.add_post("/api/sessions/{sid}/resume", api_resume)
     app.router.add_post("/api/sessions/{sid}/delete", api_delete)
+    app.router.add_post("/api/sessions/{sid}/owner", api_set_owner)
+    app.router.add_post("/api/sessions/claim", api_claim_session)
     app.router.add_route("*", "/s/{sid}", session_proxy)
     app.router.add_route("*", "/s/{sid}/{tail:.*}", session_proxy)
     app.on_startup.append(on_startup)

@@ -41,8 +41,8 @@ a.btn:hover, button:hover { background:#232933; }
 .primary:hover { background:#a50f1a; }
 .danger:hover { border-color:#a33; color:#f19; }
 form.inline { display:inline; }
-input[type=text] { font:inherit; padding:.45rem .6rem; border-radius:7px;
-        border:1px solid #2e3540; background:#0a0c0f; color:#d7dae0; }
+input[type=text], input[type=password] { font:inherit; padding:.45rem .6rem;
+        border-radius:7px; border:1px solid #2e3540; background:#0a0c0f; color:#d7dae0; }
 .empty { color:#7d848f; padding:2rem 0; text-align:center; }
 .note { color:#7d848f; font-size:.82rem; margin-top:2rem; border-top:1px solid #232830;
         padding-top:1rem; }
@@ -55,6 +55,22 @@ def _ago(seconds: int) -> str:
     if seconds < 5400:
         return f"{seconds // 60}m"
     return f"{seconds // 3600}h"
+
+
+def _duration(seconds: int) -> str:
+    """A total, rather than a "how long ago".
+
+    _ago collapses to one unit, which is right for "idle 3h" and wrong for a
+    total that someone may want to compare -- "3h" hides anything from 3:00 to
+    3:59. Totals keep the minutes.
+    """
+    hours, rest = divmod(int(seconds), 3600)
+    minutes = rest // 60
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours:
+        return f"{hours}h"
+    return f"{minutes}m"
 
 
 def session_url(s, cfg) -> str:
@@ -83,6 +99,20 @@ def _session_card(s, cfg, is_new: bool, show_owner: bool = False) -> str:
     # can open it. That is a different thing from a claimed name, so it reads
     # differently rather than being dressed up as an owner called "admin".
     owner_badge = ""
+    owner_form = ""
+    if show_owner:
+        # Assigning to a name nobody has claimed yet is allowed and useful: a
+        # name is claimed on first sign-in, so a game can be set up and waiting
+        # before the player has ever logged in. An empty box hands it back to
+        # nobody.
+        owner_form = (
+            f'<div class="row" style="margin-top:.6rem">'
+            f'<form class="inline" method="post" action="/api/sessions/{e(s.id)}/owner">'
+            f'<span class="meta">Belongs to</span> '
+            f'<input type="text" name="owner" value="{e(s.owner)}" maxlength="40" '
+            f'list="chaos-accounts" placeholder="nobody" '
+            f'style="width:11rem;margin:0 .4rem">'
+            f'<button>Assign</button></form></div>')
     if show_owner:
         if s.owner:
             owner_badge = (f'<span class="badge owner" title="This session belongs to '
@@ -99,6 +129,14 @@ def _session_card(s, cfg, is_new: bool, show_owner: bool = False) -> str:
         meta = f"stopped &middot; save kept &middot; idle {_ago(idle)}"
     else:
         meta = f"idle {_ago(idle)}"
+
+    # Time anyone has actually been watching, not how long the session has
+    # existed -- a session left running overnight with nobody in it has earned
+    # no playtime. Only shown once there is some, so a brand-new session is not
+    # decorated with "played 0s".
+    played = int(s.playtime)
+    if played >= 60:
+        meta += f" &middot; played {_duration(played)}"
 
     actions = [f'<a class="btn" href="{e(url)}" target="_blank">Open</a>']
     if s.status == "stopped":
@@ -122,6 +160,7 @@ def _session_card(s, cfg, is_new: bool, show_owner: bool = False) -> str:
         </div>
         <div>{' '.join(actions)}</div>
       </div>
+      {owner_form}
       <div class="row" style="margin-top:.8rem">
         <div class="grow"><div class="meta">Link</div><code>{e(url)}</code></div>
         <div><div class="meta">Username</div>
@@ -198,7 +237,11 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
             f'onsubmit="return confirm(\'Release {html.escape(n)}? They can claim it again '
             f'with the invite password, and keep their games.\')">'
             f'<button>Release</button></form></div>' for n in accounts)
-        extra = (f'<div class="card" style="margin-top:1.5rem">'
+        datalist = ('<datalist id="chaos-accounts">'
+                    + "".join(f'<option value="{html.escape(n)}">' for n in accounts)
+                    + '</datalist>')
+        extra = (datalist
+                 + f'<div class="card" style="margin-top:1.5rem">'
                  f'<div class="name">Player accounts</div>'
                  f'<div class="meta">A name is claimed on first sign-in and then needs its '
                  f'own password. Release one if a player forgets theirs &mdash; their games '
@@ -206,6 +249,18 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
                  if accounts or True else "")
     else:
         extra = (
+            '<div class="card" style="margin-top:1.5rem">'
+            '<div class="name">Claim a session</div>'
+            '<div class="meta">Given a link and a password for a game that is not '
+            'filed under anyone? Claim it and it becomes yours &mdash; after that '
+            'your own login opens it and you will not need the password again.</div>'
+            '<form method="post" action="/api/sessions/claim">'
+            '<div class="row" style="margin-top:.6rem">'
+            '<input type="text" name="session" placeholder="Session name (from the link)" '
+            'required style="width:16rem">'
+            '<input type="password" name="password" placeholder="That session\u2019s password" '
+            'required style="width:14rem">'
+            '<button type="submit">Claim</button></div></form></div>'
             '<div class="card" style="margin-top:1.5rem">'
             '<div class="name">Change your password</div>'
             '<form method="post" action="/api/account/password">'
