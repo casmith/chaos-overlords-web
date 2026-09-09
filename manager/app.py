@@ -26,7 +26,7 @@ import tls
 from accounts import Accounts, MIN_PASSWORD
 from sessions import SessionManager
 from proxy import proxy_http, proxy_websocket
-from web_ui import render_page, waiting_page
+from web_ui import render_page, signed_out_page, waiting_page
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="[%(name)s] %(message)s")
@@ -186,7 +186,11 @@ async def host_routing_middleware(request: web.Request, handler):
 
 @web.middleware
 async def auth_middleware(request: web.Request, handler):
-    if request.path.startswith("/s/") or request.path == "/healthz":
+    if (request.path.startswith("/s/")
+            or request.path in ("/healthz", "/logout", "/logout/forget")):
+        # /logout is exempt because it has to run: behind this middleware a
+        # signed-out browser would be turned away before it could clear the
+        # session cookies it still holds.
         return await handler(request)
     who = _identify(request)
     if who is None:
@@ -325,6 +329,64 @@ async def api_set_password(request: web.Request) -> web.Response:
         status=401,
         text=f"Password set for {name}. Sign in again with your new password.",
         headers={"WWW-Authenticate": f'Basic realm="Chaos Overlords - {name}"'})
+
+
+async def logout(request: web.Request) -> web.Response:
+    """Sign out.
+
+    Two things have to be undone and only one of them is properly ours. The
+    per-session cookies are: they are expired here and that is the end of them,
+    so nobody walking up to this browser can open a game left open on it.
+
+    The manager login is HTTP basic auth, which has no sign-out in the protocol
+    -- the browser keeps sending the credentials until it decides to stop. The
+    lever is the browser's own credential cache: send a *wrong* credential for
+    a URL in the same protection space and the browser replaces what it had
+    cached, so the next visit is challenged. The page below does that with a
+    background request to /logout/forget.
+
+    The obvious alternative -- answer 401 here and let the browser drop the
+    cache -- does clear the login, but the page is not what anyone wants to
+    land on: Chrome discards the body of a 401 whose prompt was dismissed and
+    shows its own blank error page instead. Measured, not assumed.
+    """
+    resp = web.Response(
+        content_type="text/html", text=signed_out_page(),
+        # Belt and braces for the cookies above. Deliberately not "storage":
+        # the session pages are served under this same origin, so that would
+        # also wipe the Selkies client's own per-player video and audio
+        # settings, which is not what signing out is for. Only honoured on a
+        # secure origin, so it does nothing over plain HTTP off localhost.
+        headers={"Clear-Site-Data": '"cookies"'})
+    # A cookie is only cleared when the path matches the one it was set on, and
+    # there are two possibilities: "/" for a session served on its own hostname,
+    # "/s/<id>/" for one sharing this hostname. Which one applied is not always
+    # knowable here -- a session rebuilt from its save volume after the state
+    # file was lost carries no subfolder -- and a stale cookie left behind is
+    # exactly the thing this endpoint exists to prevent. So clear both.
+    #
+    # resp.del_cookie cannot do that: it keys by cookie name, so the second call
+    # replaces the first. Raw Set-Cookie headers can.
+    for name in request.cookies:
+        if not name.startswith(session_auth.COOKIE_PREFIX):
+            continue
+        sid = name[len(session_auth.COOKIE_PREFIX):]
+        for path in ("/", f"/s/{sid}/"):
+            resp.headers.add(
+                "Set-Cookie",
+                f'{name}=""; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; '
+                f'Path={path}; HttpOnly; SameSite=Lax')
+    return resp
+
+
+async def logout_forget(request: web.Request) -> web.Response:
+    """Always refuse, so the browser caches this refusal instead of a login.
+
+    Deliberately sends no WWW-Authenticate: this is fetched in the background
+    from the signed-out page, and a challenge here would put a login box in
+    front of someone who has just asked to leave.
+    """
+    return web.Response(status=401, text="signed out")
 
 
 async def api_set_owner(request: web.Request) -> web.Response:
@@ -539,6 +601,8 @@ def build_app() -> web.Application:
     app["cfg"] = load_config()
     app.router.add_get("/", index)
     app.router.add_get("/healthz", healthz)
+    app.router.add_get("/logout", logout)
+    app.router.add_get("/logout/forget", logout_forget)
     app.router.add_post("/api/account/password", api_set_password)
     app.router.add_post("/api/accounts/{name}/release", api_release_account)
     app.router.add_get("/api/sessions", api_list)

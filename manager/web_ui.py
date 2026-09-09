@@ -171,6 +171,37 @@ def _session_card(s, cfg, is_new: bool, show_owner: bool = False) -> str:
     </div>"""
 
 
+def signed_out_page() -> str:
+    """Shown under the browser's own login box after signing out."""
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signed out</title><style>{STYLE}</style></head><body><div class="wrap">
+  <h1><span>Chaos</span> Overlords</h1>
+  <div class="card">
+    <div class="name">Signed out</div>
+    <p class="meta">Your open games on this browser have been closed &mdash;
+       anyone using it now needs to sign in again.</p>
+    <p class="meta">The login for this page is HTTP basic auth, which has no
+       sign-out of its own &mdash; each browser decides when to forget it.
+       Chrome forgets it now. <strong>Firefox and Safari keep it until every
+       window is closed</strong>, so on those, close the browser to finish
+       signing out.</p>
+    <p style="margin-top:1.2rem"><a class="btn" href="/">Sign in again</a></p>
+  </div>
+</div>
+<script>
+  // Replace whatever the browser cached for this site with a credential that
+  // does not work, so the next visit is challenged. Basic auth has no sign-out
+  // of its own; this is the only lever a page has.
+  fetch("/logout/forget", {{
+    credentials: "include",
+    headers: {{ Authorization: "Basic " + btoa("signed-out:signed-out") }}
+  }}).catch(function () {{}});
+</script>
+</body></html>"""
+
+
 def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
                 who: str = "", accounts: list | None = None) -> str:
     items = sorted(sessions, key=lambda s: s.created, reverse=True)
@@ -191,7 +222,10 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Choose a password</title><style>{STYLE}</style></head>
 <body><div class="wrap">
-  <h1><span>Chaos</span> Overlords</h1>
+  <div class="row">
+    <h1 class="grow"><span>Chaos</span> Overlords</h1>
+    <a class="btn" href="/logout">Sign out</a>
+  </div>
   <p class="sub">The name <strong>{html.escape(who)}</strong> is yours. Choose a
      password for it. From now on this is how you sign in &mdash; the shared
      invite password will not open your games again.</p>
@@ -280,7 +314,10 @@ def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
 <title>Chaos Overlords sessions</title>{refresh}
 <style>{STYLE}</style></head>
 <body><div class="wrap">
-  <h1><span>Chaos</span> Overlords &mdash; sessions</h1>
+  <div class="row">
+    <h1 class="grow"><span>Chaos</span> Overlords &mdash; sessions</h1>
+    <a class="btn" href="/logout">Sign out</a>
+  </div>
   <p class="sub">{intro} Each session is shut down after
      {cfg['idle_minutes']} minutes with nobody watching. {retention_note}
      {whoami}</p>

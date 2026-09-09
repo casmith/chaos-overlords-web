@@ -232,6 +232,42 @@ afterwards. That label is only consulted to rebuild sessions when the state file
 is lost — so in that specific disaster, sessions come back under their original
 owners.
 
+### Signing out
+
+There is a **Sign out** button on every page. It does two different things,
+and only one of them is fully in our gift.
+
+The **per-session cookies are cleared**, on both paths a session's cookie could
+have been set on. That is the part that matters on a shared browser: whoever
+sits down next cannot open a game that was left open. Verified in a browser —
+the cookie count for a session goes from 1 to 0.
+
+The **manager login is HTTP basic auth, which has no sign-out in the protocol**;
+each browser decides when to forget it. The sign-out page overwrites the cached
+credential with one that does not work, via a background request to
+`/logout/forget`, and sends `Clear-Site-Data: "cookies"`.
+
+- **Chrome** forgets the login. Verified: signed in, hit Sign out, went back to
+  the page, and was challenged again.
+- **Firefox** does not — it keeps the credential until every window is closed,
+  and neither the overwrite nor `Clear-Site-Data` shifts it. Verified, not
+  assumed. The sign-out page says so plainly rather than implying otherwise.
+
+Two details worth knowing if you touch this. `/logout` and `/logout/forget` are
+exempt from the auth middleware: behind it, a browser that had just been signed
+out would be turned away before it could clear anything. And `/logout/forget`
+deliberately sends no `WWW-Authenticate`, because a challenge there would put a
+login box in front of someone who has just asked to leave.
+
+The obvious alternative — answer `401` from `/logout` and let the browser drop
+the cache — does clear the login, but Chrome discards the body of a `401` whose
+prompt was dismissed and shows its own blank error page. Measured, hence the
+current shape.
+
+`Clear-Site-Data` deliberately does not include `"storage"`: session pages are
+served under this same origin, so that would also wipe the Selkies client's
+per-player video and audio settings, which is not what signing out is for.
+
 ### Playtime
 
 Each card shows how long the session has actually been watched, once that passes
