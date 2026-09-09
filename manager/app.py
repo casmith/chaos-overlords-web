@@ -194,7 +194,11 @@ async def auth_middleware(request: web.Request, handler):
         return await handler(request)
     who = _identify(request)
     if who is None:
-        realm = ("Chaos Overlords \u2014 admin, or your name with the invite password"
+        # ASCII only. An HTTP field value is US-ASCII; anything above 0x7f is
+        # obs-text, whose interpretation is left undefined, so a UTF-8 dash
+        # here goes out as raw bytes and is read back as Latin-1 mojibake by
+        # anything that displays it. This realm used to carry an em dash.
+        realm = ("Chaos Overlords - admin, or your name with the invite password"
                  if request.app["cfg"]["invite_password"] else "Chaos Overlords")
         return web.Response(
             status=401, text="Authentication required.",
