@@ -390,6 +390,22 @@ If the shim is active and the session is still at 100%, check that a debug
 channel is not enabled (`DEBUG=false`, which sets `WINEDEBUG=-all`), then see
 [cpu-findings.md](cpu-findings.md) for how the original diagnosis was made.
 
+## A form action left me on an /api/ URL
+
+Fixed, but worth knowing what it was. The action endpoints (stop, resume,
+delete, owner) are POST-only. Firefox, challenged with a 401 on a form POST,
+retries the request as a **GET** once credentials are supplied rather than
+resubmitting the POST — so the reply was a bare `405: Method Not Allowed` at
+`/api/sessions/<name>/resume`, with no way back. Chrome resubmits the POST and
+never sees it.
+
+A GET on any action URL now redirects to the sessions page and deliberately
+does **not** perform the action: doing work on a GET would let any page
+anywhere stop or delete a session with an `<img>` tag. Errors from form actions
+render a page with a "Back to sessions" link instead of bare text, for browsers
+only — `curl` still gets plain text, and 401 is left alone everywhere so the
+browser keeps prompting.
+
 ## The image build fails with "base ... not found"
 
 It used to, and should not any more. The Selkies base was pinned by digest, and

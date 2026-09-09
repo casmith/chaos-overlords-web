@@ -26,7 +26,7 @@ import tls
 from accounts import Accounts, MIN_PASSWORD
 from sessions import SessionManager
 from proxy import proxy_http, proxy_websocket
-from web_ui import render_page, signed_out_page, waiting_page
+from web_ui import error_page, render_page, signed_out_page, waiting_page
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="[%(name)s] %(message)s")
@@ -182,6 +182,27 @@ async def host_routing_middleware(request: web.Request, handler):
     if sid:
         return await handle_session(request, sid)
     return await handler(request)
+
+
+@web.middleware
+async def error_page_middleware(request: web.Request, handler):
+    """Give a browser a way back when an action fails.
+
+    Scoped to /api/ and to requests that asked for HTML, because everything
+    else here wants the plain reply: the session proxy and the landing page
+    both answer 401 with a challenge the browser handles itself, and a curl or
+    fetch caller wants text, not a page. 401 is left alone everywhere for the
+    same reason -- dressing up a challenge would stop the browser prompting.
+    """
+    try:
+        return await handler(request)
+    except web.HTTPException as exc:
+        wants_html = "text/html" in request.headers.get("Accept", "")
+        if (exc.status >= 400 and exc.status != 401
+                and request.path.startswith("/api/") and wants_html):
+            return web.Response(status=exc.status, content_type="text/html",
+                                text=error_page(exc.status, exc.text or exc.reason))
+        raise
 
 
 @web.middleware
@@ -450,6 +471,25 @@ async def api_claim_session(request: web.Request) -> web.Response:
     raise web.HTTPFound(f"/?new={session.id}")
 
 
+async def api_action_get(request: web.Request) -> web.Response:
+    """Send a stray GET on an action URL back to the sessions page.
+
+    These endpoints are POST-only and a browser can still land a GET on one.
+    Firefox does it: challenge a form POST with a 401 and, once the credentials
+    are supplied, it retries the request as a GET rather than resubmitting the
+    POST. The reply was a bare "405: Method Not Allowed" at an /api/ URL with
+    no way back -- which is what an operator saw as "it redirected me to
+    /api/sessions/<name>/resume". A reload, a restored tab or a bookmark of one
+    of these URLs does the same thing.
+
+    It deliberately does NOT perform the action. Doing work on a GET would mean
+    any page anywhere could stop or delete someone's session with an <img> tag.
+    The action is dropped and the browser is put back somewhere useful; if the
+    session did need resuming, opening it does that anyway.
+    """
+    raise web.HTTPFound("/")
+
+
 async def api_release_account(request: web.Request) -> web.Response:
     """Admin: release a name so a forgetful player can claim it again."""
     if request.get("role") != "admin":
@@ -600,7 +640,7 @@ async def on_cleanup(app: web.Application) -> None:
 
 def build_app() -> web.Application:
     app = web.Application(
-        middlewares=[host_routing_middleware, auth_middleware],
+        middlewares=[error_page_middleware, host_routing_middleware, auth_middleware],
         client_max_size=1024 ** 3)
     app["cfg"] = load_config()
     app.router.add_get("/", index)
@@ -615,6 +655,10 @@ def build_app() -> web.Application:
     app.router.add_post("/api/sessions/{sid}/resume", api_resume)
     app.router.add_post("/api/sessions/{sid}/delete", api_delete)
     app.router.add_post("/api/sessions/{sid}/owner", api_set_owner)
+    # A GET on any of the above is a browser having lost the method, not an
+    # attempt to do anything. Answer it after the POST routes so it only ever
+    # catches what they did not.
+    app.router.add_get("/api/sessions/{sid}/{action}", api_action_get)
     app.router.add_post("/api/sessions/claim", api_claim_session)
     app.router.add_route("*", "/s/{sid}", session_proxy)
     app.router.add_route("*", "/s/{sid}/{tail:.*}", session_proxy)

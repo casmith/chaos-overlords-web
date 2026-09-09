@@ -171,6 +171,26 @@ def _session_card(s, cfg, is_new: bool, show_owner: bool = False) -> str:
     </div>"""
 
 
+def error_page(status: int, message: str) -> str:
+    """An error from a form action, with a way back.
+
+    Without this the reply to a failed action is bare text at an /api/ URL and
+    the only way out is the back button -- which is how "Method Not Allowed"
+    became "it redirected me somewhere broken".
+    """
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{status}</title><style>{STYLE}</style></head><body><div class="wrap">
+  <h1><span>Chaos</span> Overlords</h1>
+  <div class="card">
+    <div class="name">That did not work <span class="badge stopped">{status}</span></div>
+    <p class="meta">{html.escape(message)}</p>
+    <p style="margin-top:1.2rem"><a class="btn" href="/">Back to sessions</a></p>
+  </div>
+</div></body></html>"""
+
+
 def signed_out_page() -> str:
     """Shown under the browser's own login box after signing out."""
     return f"""<!doctype html>
