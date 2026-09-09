@@ -17,18 +17,18 @@
 # digest. Same distribution, same Python 3.13, so the native extensions match
 # our runtime ABI exactly.
 #
-# Expect this to need updating from time to time, and to find out by the build
-# failing with "not found": the tag moves, and upstream garbage-collects the
-# manifests nothing points at any more, digest pin or no digest pin. A local
-# build can keep working long after CI stops, because the layers are still in
-# the local cache -- so a green build here is not evidence the pin is still
-# fetchable.
+# Tracked by tag, not by digest, and that is deliberate. A digest pin was tried
+# and broke the build twice in two days: this tag is a rolling build of
+# upstream's main branch, and upstream garbage-collects the manifests nothing
+# points at, so the pin does not buy reproducibility -- it buys a build that
+# works until upstream tidies up and then fails with "not found". Worse, a local
+# build keeps working off cached layers long after CI has started failing.
 #
-# To update: docker pull ghcr.io/selkies-project/selkies/base:main-debiantrixie
-#            docker image inspect --format '{{index .RepoDigests 0}}' <that image>
-#            then rebuild and run it, because the Selkies inside has moved too
+# What the pin was really protecting against -- the Selkies inside changing
+# under us -- is covered by scripts/check-selkies-flags.sh below, which fails
+# the build if a flag this image passes has gone away.
 # ---------------------------------------------------------------------------
-ARG SELKIES_IMAGE=ghcr.io/selkies-project/selkies/base@sha256:7b8d7d9b2a3050d34b4e2d0f02b60ba6040d59a1338d26161d416068ec918b58
+ARG SELKIES_IMAGE=ghcr.io/selkies-project/selkies/base:main-debiantrixie
 FROM ${SELKIES_IMAGE} AS selkies
 
 # ---------------------------------------------------------------------------
@@ -185,6 +185,13 @@ RUN set -eux; \
     done; \
     python3 -c "import selkies, pixelflux, pcmflux; print('selkies imports cleanly')"; \
     selkies --help > /dev/null
+
+# The base image moves, so make it loud when it moves out from under us.
+COPY scripts/check-selkies-flags.sh /tmp/check-selkies-flags.sh
+COPY rootfs/etc/s6-overlay/s6-rc.d/selkies/run /tmp/selkies-run
+RUN set -eux; \
+    sh /tmp/check-selkies-flags.sh /tmp/selkies-run; \
+    rm -f /tmp/check-selkies-flags.sh /tmp/selkies-run
 
 # The preload is silently ignored by ld.so if it is missing or the wrong class,
 # and the only symptom would be a session quietly back at 100% CPU.

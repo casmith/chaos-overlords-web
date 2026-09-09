@@ -390,6 +390,26 @@ If the shim is active and the session is still at 100%, check that a debug
 channel is not enabled (`DEBUG=false`, which sets `WINEDEBUG=-all`), then see
 [cpu-findings.md](cpu-findings.md) for how the original diagnosis was made.
 
+## The image build fails with "base ... not found"
+
+It used to, and should not any more. The Selkies base was pinned by digest, and
+upstream garbage-collects the manifests nothing points at — so the pin worked
+until they tidied up, twice in two days, while local builds carried on happily
+off cached layers. The base is now tracked by its tag.
+
+What the pin was protecting against is covered by
+`scripts/check-selkies-flags.sh`, which runs at build time and fails loudly if
+Selkies has dropped a flag this image passes:
+
+```
+ERROR: Selkies no longer accepts: --enable-cursors
+The base image has moved on. Check what replaced them before building.
+```
+
+It only checks flag *names*. Whether a flag still means what it did is not
+something a build can know — `--video-fullcolor` was accepted happily and still
+broke two browsers.
+
 ## It works in Chrome but not Firefox or Brave
 
 Almost always `VIDEO_FULLCOLOR=true`. Firefox and Brave have no H.264 4:4:4
