@@ -476,6 +476,18 @@ is the intro cinematic: clicking through it leaves the game unable to draw any
 masked sprite on the map for the rest of that process. The game state is fine --
 **Gangs In Sector** will list gangs the map shows nothing for.
 
+There are two triggers and both are handled. The intro is one; the other is
+**starting a game before the game has finished coming up**, which breaks it the
+same way (measured: a new game 5s after launch is broken, 10s is fine). The
+container now stays unhealthy until the game has settled — something drawn on
+screen, and at least 20 seconds since launch — so the manager cannot hand out a
+session inside that window. A session reports healthy at ~32s rather than ~7s.
+
+```bash
+docker logs chaos1 2>&1 | grep -i 'ready to play'   # "[game] Ready to play after 20s"
+docker exec chaos1 ls /run/chaos/game-ready         # the flag the healthcheck gates on
+```
+
 `GAME_INTRO` defaults to `false`, which keeps the films out of the prefix so the
 game never plays one. Check it took:
 

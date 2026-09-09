@@ -57,6 +57,47 @@ It is also much faster: a session is ready in about **30 seconds instead of
 the caveat that clicking through it will break that session's map sprites until
 the game restarts.
 
+## The intro was hiding a race, not causing one
+
+Skipping the intro did not end this. It came back, and the reason is worse than
+the original: **starting a new game before the game has finished coming up
+breaks the sprites the same way.** Measured, by starting a game a fixed time
+after the game process appears:
+
+| new game started | grid-letter pixels | |
+|---|---|---|
+| after 2s | 0 | broken |
+| after 5s | 0 | broken |
+| after 10s | 548 | fine |
+| after 25s | 548 | fine |
+
+So clicking through the intro was never the real trigger — it was one way of
+arriving at the menu too early. The intro was a two-minute wall that made the
+race impossible to lose. Taking it away cut session start from 150 seconds to
+30 and dropped players straight into the window where it breaks.
+
+The fix is `scripts/wait-game-ready.py`: the container stays **unhealthy**, and
+so the manager will not hand the session to a player, until the game has
+settled. Two conditions, because either alone is not enough:
+
+- **Something is drawn.** Waiting for the screen to merely stop changing fires
+  instantly: the display is solid black for the first ten seconds and black is
+  perfectly stable. Measured lit fraction is 0.000 until ~11s, then 0.750 at
+  the title screen.
+- **At least 20 seconds since launch.** The screen can settle while the game is
+  still inside the bad window — an early build reported ready at 7s and the very
+  next game was broken. The measured boundary is between 5s and 10s, so the
+  floor sits well past it. The screen test is what copes with a slow host; the
+  floor is what copes with a screen that looks finished before the game is.
+
+A session now reports healthy at about 32 seconds instead of 7. Verified by
+starting a game at the very instant the container reports healthy, three times:
+548 grid-letter pixels and gang rings present every time, against 0 before.
+
+If it never settles, the flag is set anyway after `GAME_READY_TIMEOUT` (300s) --
+a session that cannot be reached at all is worse than one that might have a
+drawing bug.
+
 ## What this cost, and the lesson
 
 This was the first thing reported and the last thing found. The reason is a

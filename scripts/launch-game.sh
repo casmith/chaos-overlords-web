@@ -92,6 +92,11 @@ while [ "${shutdown_requested}" = "false" ]; do
     fi
     game_pid=$!
 
+    # Hold the container unhealthy until the game has settled, so nobody can
+    # start a game in the window where doing so breaks its sprites. See
+    # scripts/wait-game-ready.py.
+    /opt/chaos/scripts/wait-game-ready.py &
+
     wait "${game_pid}"
     status=$?
     game_pid=""

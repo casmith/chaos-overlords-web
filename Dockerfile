@@ -223,7 +223,7 @@ RUN set -eux; \
     grep -q chaos-ui-css "/usr/local/lib/${SELKIES_PYTHON}/dist-packages/selkies/selkies_web/index.html"
 
 RUN set -eux; \
-    chmod +x /opt/chaos/scripts/*.sh /usr/local/bin/chaos-*; \
+    chmod +x /opt/chaos/scripts/*.sh /opt/chaos/scripts/*.py /usr/local/bin/chaos-*; \
     ln -sf /opt/chaos/scripts/healthcheck.sh /usr/local/bin/healthcheck.sh; \
     ln -sf /opt/chaos/scripts/detect-network.sh /usr/local/bin/detect-network.sh; \
     ln -sf /opt/chaos/scripts/init-wine.sh /usr/local/bin/init-wine.sh; \

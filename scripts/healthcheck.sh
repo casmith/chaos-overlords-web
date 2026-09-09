@@ -52,6 +52,19 @@ if [ "${ENABLE_VNC}" = "true" ]; then
     ok+=("vnc")
 fi
 
+# 8. The game has settled. Starting a new game before it has finished coming up
+#    leaves it unable to draw the map's sprites for the rest of that process, so
+#    a session must not be handed to a player until this clears. Only gates
+#    while the game is actually running: a player who has quit to the desktop is
+#    not waiting on anything.
+#    Unconditional once init has completed, not "only while the game process
+#    exists": for the first several seconds Wine is still starting and there is
+#    no process to test, which is exactly the window this is meant to close.
+#    wait-game-ready.py always sets the flag eventually -- it gives up after
+#    GAME_READY_TIMEOUT and sets it anyway -- so this cannot strand a session.
+[ -f /run/chaos/game-ready ] || fail "the game is still starting up"
+ok+=("settled")
+
 # Informational only.
 if pgrep -f -i 'chaos.*\.exe' >/dev/null 2>&1; then
     ok+=("game")
