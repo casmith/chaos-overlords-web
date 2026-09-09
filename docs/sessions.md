@@ -200,6 +200,12 @@ ADMIN_PASSWORD=...     full control: every session, delete anyone's
 INVITE_PASSWORD=...    create your own, see and manage only your own
 ```
 
+Each session on the admin page carries a pill saying who it belongs to: the
+player's claimed name, or **no owner** for one created from the admin page,
+which nobody owns and which anyone opening needs the share password for. A
+guest never sees the pill — every session on their page is theirs, so the
+answer would always be "you".
+
 **The trust level is "a group of friends".** Claiming is first-come: the invite
 password opens any name nobody has taken yet, so it is worth telling players to
 sign in once early rather than on the night. Once a name is claimed it takes its

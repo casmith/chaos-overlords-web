@@ -28,6 +28,11 @@ code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; background:#0a0c
 .ready   { color:#5dd39e; border-color:#2c6b45; }
 .starting{ color:#e8c468; border-color:#6b5a2c; }
 .stopped { color:#7d848f; border-color:#333a44; }
+/* Owner names are chosen by players, so they are shown as typed rather than
+   upper-cased like the status badges. */
+.owner   { color:#8fb8ff; border-color:#33507d; text-transform:none;
+           letter-spacing:0; }
+.owner.unowned { color:#7d848f; border-color:#333a44; font-style:italic; }
 a.btn, button { font:inherit; font-size:.88rem; padding:.42rem .85rem; border-radius:7px;
         border:1px solid #2e3540; background:#1b2028; color:#d7dae0; cursor:pointer;
         text-decoration:none; display:inline-block; }
@@ -67,10 +72,26 @@ def session_url(s, cfg) -> str:
     return f"{base}{s.path}/" if base else f"{s.path}/"
 
 
-def _session_card(s, cfg, is_new: bool) -> str:
+def _session_card(s, cfg, is_new: bool, show_owner: bool = False) -> str:
     e = html.escape
     idle = int(time.time() - s.last_seen)
     url = session_url(s, cfg)
+
+    # Who a session belongs to, for the admin only -- a guest sees nothing but
+    # their own sessions, so the answer would always be "you". A session made
+    # from the admin page has no owner: nobody claimed it, and only the admin
+    # can open it. That is a different thing from a claimed name, so it reads
+    # differently rather than being dressed up as an owner called "admin".
+    owner_badge = ""
+    if show_owner:
+        if s.owner:
+            owner_badge = (f'<span class="badge owner" title="This session belongs to '
+                           f'{e(s.owner)}; they open it with their own login.">'
+                           f'{e(s.owner)}</span>')
+        else:
+            owner_badge = ('<span class="badge owner unowned" title="Created from this '
+                           'admin page, so no player owns it. Anyone opening it needs '
+                           'the share password below.">no owner</span>')
 
     if s.active_conns:
         meta = f"{s.active_conns} viewer{'s' if s.active_conns != 1 else ''} connected"
@@ -96,7 +117,7 @@ def _session_card(s, cfg, is_new: bool) -> str:
       <div class="row">
         <div class="grow">
           <div class="name">{e(s.label or 'Session ' + s.id)}
-            <span class="badge {s.status}">{s.status}</span></div>
+            <span class="badge {s.status}">{s.status}</span>{owner_badge}</div>
           <div class="meta">{meta}</div>
         </div>
         <div>{' '.join(actions)}</div>
@@ -114,14 +135,15 @@ def _session_card(s, cfg, is_new: bool) -> str:
 def render_page(sessions, cfg, new_id: str = "", role: str = "admin",
                 who: str = "", accounts: list | None = None) -> str:
     items = sorted(sessions, key=lambda s: s.created, reverse=True)
-    cards = "".join(_session_card(s, cfg, s.id == new_id) for s in items) or \
+    is_admin = role == "admin"
+    cards = "".join(_session_card(s, cfg, s.id == new_id, show_owner=is_admin)
+                    for s in items) or \
         '<div class="empty">No sessions yet. Start one below.</div>'
     hours = cfg.get("retention_hours", 0)
     retention_note = ("Saves are kept indefinitely &mdash; nothing is deleted "
                       "unless you delete it." if not hours else
                       f"Saves are kept for {hours} hours after that.")
     accounts = accounts or []
-    is_admin = role == "admin"
 
     # A player who has just claimed a name can do exactly one thing.
     if role == "claiming":
